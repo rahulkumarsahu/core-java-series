@@ -1,7 +1,0 @@
-Intentional departures
-
-- Reduced the deck from ten slides to six because the requested audience is junior engineers and the user asked for a concise, point-to-point presentation.
-- Combined normalization, redaction, masking, Drain, and storage into the Phase 1 overview instead of keeping one slide per concept.
-- Reused the existing Phase 1 flow layout for Phase 2 and Phase 3 so the deck teaches one consistent reading pattern.
-- Simplified every process to a one-line definition and one flow; deep implementation mechanics remain in the source documentation rather than visible slide copy.
-- Retained the existing visual identity, typography, colors, spacing, footer, and notebook-grid accent.
