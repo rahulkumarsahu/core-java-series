@@ -1,0 +1,212 @@
+# Proposed Layer 3 policy. The repository does not currently define this schema.
+schema_version: "retrieval-policy/v1"
+policy_id: "retrieval-policy-v1"
+policy_version: "1.0.0"
+
+enabled_sources:
+  runbooks: true
+  service_documentation: true
+  architecture_documentation: true
+  incidents: true
+  confirmed_root_causes: true
+  confirmed_fixes: true
+  deployment_metadata: true
+  ownership: true
+  pipeline_definitions: true
+  configuration: true
+  source_code: true
+  test_code: true
+  commit_history: false  # Enable only when permission and purpose are explicit.
+  run_summaries: true
+  raw_logs: false        # Layer 2 supplies redacted evidence references instead.
+
+required_filters:
+  common:
+    - "tenant_id"
+    - "permission_labels"
+    - "validation_status"
+  code:
+    - "repository_id"
+    - "commit_sha"
+  conditional:
+    service: "when_known"
+    pipeline: "when_known"
+    environment: "when_known"
+    stage_or_node: "when_known"
+    time_range: "source_specific"
+
+hybrid_retrieval:
+  # Channel weights are normalized and used after each channel score is calibrated.
+  weights:
+    lexical: 0.40
+    vector: 0.35
+    graph: 0.25
+  lexical:
+    method: "bm25"
+    exact_error_boost: 1.50
+    template_fingerprint_boost: 1.40
+    symbol_name_boost: 1.25
+    configuration_key_boost: 1.20
+  vector:
+    embedding_model_version: "embed-v1"
+    minimum_similarity: 0.62
+  graph:
+    maximum_hops: 2
+    allowed_edges:
+      - "defines"
+      - "references"
+      - "calls"
+      - "imports"
+      - "tests"
+      - "configured_by"
+      - "runs_in"
+      - "depends_on"
+      - "owned_by"
+
+candidate_limits:
+  lexical_per_query: 100
+  vector_per_query: 100
+  graph_nodes_per_seed: 50
+  merged_before_reranking: 200
+  after_reranking: 40
+  final_chunks: 16
+
+reranking:
+  enabled: true
+  minimum_score: 0.55
+  include_source_trust: true
+  include_freshness: true
+  include_commit_compatibility: true
+  include_evidence_relationship: true
+  diversity:
+    maximum_near_duplicates: 1
+    minimum_distinct_source_types_when_available: 3
+
+freshness:
+  # Half-life applies only after the source-specific grace period.
+  default_half_life_days: 180
+  grace_period_days:
+    runbook: 90
+    service_documentation: 90
+    architecture_documentation: 365
+    incident: 365
+    ownership: 14
+    deployment_metadata: 30
+    code: 0
+  stale_record_handling:
+    mode: "downweight_and_label"
+    reject_if_superseded: true
+    allow_if_only_available_source: true
+    require_stale_notice_in_context: true
+
+source_trust_weights:
+  approved_runbook: 1.00
+  commit_matched_source_code: 1.00
+  commit_matched_configuration: 1.00
+  confirmed_fix: 0.95
+  confirmed_root_cause: 0.95
+  deployment_metadata: 0.90
+  reviewed_service_documentation: 0.85
+  reviewed_architecture_documentation: 0.80
+  ownership_authority: 0.90
+  unconfirmed_incident_hypothesis: 0.30
+  generated_run_summary: 0.45
+
+commit_compatibility:
+  exact_commit_required_by_default: true
+  allow_ancestor_fallback: true
+  maximum_ancestor_distance: 20
+  require_unchanged_content_digest_for_fallback: true
+  allow_descendant_fallback: false
+  label_all_non_exact_matches: true
+  reject_cross_repository_code: true
+  branch_must_be_in_run_lineage: true
+
+code_context:
+  maximum_symbols: 8
+  maximum_files: 6
+  maximum_graph_hops: 2
+  include_parent_signature: true
+  include_exact_line_ranges: true
+  include_file_summary_parent: true
+  supported_language_behavior: "symbol_aware"
+  unsupported_language_behavior: "file_type_aware_text_fallback"
+  require_parse_quality_label: true
+
+token_budget:
+  tokenizer: "target_model_tokenizer"
+  total_retrieval_tokens: 6000
+  reservations:
+    operational_knowledge: 1400
+    incidents_and_confirmed_fixes: 1200
+    source_and_test_code: 1800
+    configuration_pipeline_and_ownership: 900
+    provenance_and_compatibility_notes: 500
+    safety_margin: 200
+  preserve_code_symbol_boundaries: true
+  preserve_ordered_runbook_steps: true
+  summarize_when_indivisible_chunk_cannot_fit: true
+
+per_source_quotas:
+  maximum_chunks:
+    runbook: 3
+    service_documentation: 2
+    architecture_documentation: 2
+    incident: 3
+    confirmed_fix: 2
+    deployment_metadata: 2
+    ownership: 1
+    pipeline_definition: 2
+    configuration: 3
+    source_code: 6
+    test_code: 3
+    commit_history: 2
+    run_summary: 2
+
+permissions:
+  enforce_at:
+    - "ingestion"
+    - "candidate_generation"
+    - "content_resolution"
+    - "cache_read"
+    - "context_assembly"
+  deny_by_default: true
+  never_use_model_for_authorization: true
+  require_tenant_partition: true
+  reject_metadata_leakage: true
+  secure_content_references_only: true
+
+provenance:
+  minimum_fields:
+    - "source_type"
+    - "source_ref"
+    - "content_digest"
+    - "exact_location"
+    - "permission_decision"
+    - "validation_status"
+    - "freshness_status"
+  code_additional_fields:
+    - "repository_id"
+    - "branch"
+    - "commit_sha"
+    - "path"
+    - "line_start"
+    - "line_end"
+  reject_candidate_without_minimum_provenance: true
+  require_citations_in_generated_output: true
+
+retention_and_deletion:
+  immutable_index_generations: true
+  tombstone_before_physical_delete: true
+  remove_from_active_retrieval_immediately: true
+  verify_vector_and_cache_deletion: true
+  retain_audit_metadata_without_content: true
+
+validation:
+  require_channel_weights_sum: 1.0
+  require_nonnegative_candidate_limits: true
+  require_code_commit_filter: true
+  require_permission_filter: true
+  reject_enabled_raw_log_indexing: true
+  reject_unversioned_embedding_model: true
+  reject_unversioned_policy: true

@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "checkedAt": "2026-08-23T19:17:50.284Z",
+  "workspace": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/.tmp_logsift_full_deck",
+  "mapPath": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/.tmp_logsift_full_deck/template-frame-map.json",
+  "inspectPath": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/.tmp_logsift_full_deck/template-inspect/template-inspect.ndjson",
+  "sourceSlideCount": 10,
+  "issueCount": 0,
+  "issues": []
+}

@@ -1,0 +1,90 @@
+{
+  "outputSlides": [
+    {
+      "outputSlide": 1,
+      "sourceSlide": 1,
+      "narrativeRole": "opening thesis",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {
+          "action": "rewrite",
+          "shapeIds": ["sh/vmdcj2xw", "sh/4r6dg7et", "sh/ipovexwn", "sh/3qxwn2x8", "sh/sfqdkrep", "sh/dgzetcfa", "sh/1cvuxc7e", "sh/0bmd476t", "sh/zadcv2p8", "sh/e94v2hon", "sh/90ve1w7q", "sh/ozmd8r65", "sh/nydczmpk"],
+          "reason": "Refresh the opening for the complete three-phase story."
+        }
+      ]
+    },
+    {
+      "outputSlide": 2,
+      "sourceSlide": 2,
+      "narrativeRole": "Phase 1 simple learning flow",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {
+          "action": "rewrite",
+          "shapeIds": ["sh/nu58f2hs", "sh/wjy9sry9", "sh/ahwrqhgj", "sh/bip8jmho", "sh/cnupgny5", "sh/do3q9szq", "sh/t8byxkn2", "sh/s72xofmh", "sh/76twva5c", "sh/65kfmpor", "sh/hcvy14ne", "sh/gbmxszmt", "sh/fadgzu58", "sh/u94fqp4n", "sh/p0vy54na", "sh/4zmxwzmp", "sh/mlgvq147", "sh/nmpcj6ls", "sh/onydsbmd", "sh/9o7ulg3y", "sh/a9gvulkj", "sh/ba9cn6l4", "sh/wbidwb29", "sh/xcrupg3u", "sh/id0vylkf", "sh/je9crql0", "sh/ru5cbqd4"],
+          "reason": "Condense Phase 1 into one junior-friendly flow."
+        }
+      ]
+    },
+    {
+      "outputSlide": 3,
+      "sourceSlide": 3,
+      "narrativeRole": "Jules and Lattice distinction with baseline ownership",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {
+          "action": "rewrite",
+          "shapeIds": ["sh/83ulovat", "sh/v6l4jq94", "sh/x8nml0ra", "sh/w7ulsvqp", "sh/ja54na9g", "sh/i9w3u58v", "sh/e10f2twf", "sh/f29gbyx0", "sh/03ix43e5", "sh/14ryd8fq", "sh/6d0fytg3", "sh/re9g7yxo", "sh/sfix03y9", "sh/tgry9ofu", "sh/a9kfadwn", "sh/batgjixs", "sh/l4fi9cza", "sh/k3m1g7yp", "sh/z2d07mh4", "sh/y14jehgj", "sh/x0vi5czy", "sh/czmhc7id", "sh/byd032h8", "sh/ax4zax0n", "sh/hwzihwzi", "sh/wv61obyx", "sh/4nuhs7uh"],
+          "reason": "Keep the source comparison layout but simplify the explanation and add the ownership key."
+        }
+      ]
+    },
+    {
+      "outputSlide": 4,
+      "sourceSlide": 2,
+      "narrativeRole": "Phase 2 simple failure analysis flow",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {
+          "action": "rewrite",
+          "shapeIds": ["sh/nu58f2hs", "sh/wjy9sry9", "sh/ahwrqhgj", "sh/bip8jmho", "sh/cnupgny5", "sh/do3q9szq", "sh/t8byxkn2", "sh/s72xofmh", "sh/76twva5c", "sh/65kfmpor", "sh/hcvy14ne", "sh/gbmxszmt", "sh/fadgzu58", "sh/u94fqp4n", "sh/p0vy54na", "sh/4zmxwzmp", "sh/mlgvq147", "sh/nmpcj6ls", "sh/onydsbmd", "sh/9o7ulg3y", "sh/a9gvulkj", "sh/ba9cn6l4", "sh/wbidwb29", "sh/xcrupg3u", "sh/id0vylkf", "sh/je9crql0", "sh/ru5cbqd4"],
+          "reason": "Turn the shared flow layout into the concise failure-analysis pipeline."
+        }
+      ]
+    },
+    {
+      "outputSlide": 5,
+      "sourceSlide": 2,
+      "narrativeRole": "Phase 3 simple retrieval flow",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {
+          "action": "rewrite",
+          "shapeIds": ["sh/nu58f2hs", "sh/wjy9sry9", "sh/ahwrqhgj", "sh/bip8jmho", "sh/cnupgny5", "sh/do3q9szq", "sh/t8byxkn2", "sh/s72xofmh", "sh/76twva5c", "sh/65kfmpor", "sh/hcvy14ne", "sh/gbmxszmt", "sh/fadgzu58", "sh/u94fqp4n", "sh/p0vy54na", "sh/4zmxwzmp", "sh/mlgvq147", "sh/nmpcj6ls", "sh/onydsbmd", "sh/9o7ulg3y", "sh/a9gvulkj", "sh/ba9cn6l4", "sh/wbidwb29", "sh/xcrupg3u", "sh/id0vylkf", "sh/je9crql0", "sh/ru5cbqd4"],
+          "reason": "Turn the shared flow layout into the concise RAG and code-context pipeline."
+        }
+      ]
+    },
+    {
+      "outputSlide": 6,
+      "sourceSlide": 10,
+      "narrativeRole": "complete three-phase summary",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {
+          "action": "rewrite",
+          "shapeIds": ["sh/r6pcv6lw", "sh/0bit8b2d", "sh/e9gb61k7", "sh/fapcz6ls", "sh/ozitcv29", "sh/p0ru503u", "sh/xwnupgvy", "sh/wvetgbud", "sh/bu5cnqd8", "sh/atwbelcn", "sh/lk7ut0va", "sh/kjytkvup", "sh/jypcrqd4", "sh/yxgbilcj", "sh/1o3ahwvq", "sh/0nut8rul", "sh/q9srixs3", "sh/ru18r2to", "sh/cva9k7a9", "sh/dwjqtcbu"],
+          "reason": "Replace the Phase 1 handoff with the complete three-phase mental model."
+        }
+      ]
+    }
+  ],
+  "omittedSourceSlides": [
+    { "sourceSlide": 4, "reason": "Normalization is summarized inside the Phase 1 flow." },
+    { "sourceSlide": 5, "reason": "Redaction is summarized inside the Phase 1 flow." },
+    { "sourceSlide": 6, "reason": "Masking is summarized inside the Phase 1 flow." },
+    { "sourceSlide": 7, "reason": "Drain is summarized inside the Phase 1 flow." },
+    { "sourceSlide": 8, "reason": "Artifact details are reduced to essential files and outputs." },
+    { "sourceSlide": 9, "reason": "The four-part key is included on the Jules/Lattice slide." }
+  ]
+}

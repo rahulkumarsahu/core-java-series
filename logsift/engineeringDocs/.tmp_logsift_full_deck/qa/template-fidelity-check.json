@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "checkedAt": "2026-08-23T19:25:13.345Z",
+  "workspace": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/.tmp_logsift_full_deck",
+  "finalPptx": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/final/Logsift_Phase_1_Offline_Learning.pptx",
+  "starterPptx": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/.tmp_logsift_full_deck/template-starter.pptx",
+  "mapPath": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/.tmp_logsift_full_deck/template-frame-map.json",
+  "starterLayoutDir": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/.tmp_logsift_full_deck/template-starter-layout",
+  "finalLayoutDir": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/.tmp_logsift_full_deck/final-renders",
+  "editDir": "/Users/rahulkumar/Documents/Project/logsift/engineeringDocs/.tmp_logsift_full_deck",
+  "issueCount": 0,
+  "issues": []
+}

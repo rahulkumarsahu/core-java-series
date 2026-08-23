@@ -1,0 +1,10 @@
+Communication job
+By the end, a junior engineer should understand what each Logsift phase does, what it receives, and what it produces, because the complete system is explained as three short connected flows.
+
+Internal sources
+- /Users/rahulkumar/Documents/Project/logsift/engineeringDocs/final/logsift-architecture/01-problem-and-architecture.md
+- /Users/rahulkumar/Documents/Project/logsift/engineeringDocs/final/logsift-architecture/02-offline-learning-flow.md
+- /Users/rahulkumar/Documents/Project/logsift/engineeringDocs/final/logsift-architecture/03-failure-analysis-flow.md
+- /Users/rahulkumar/Documents/Project/logsift/engineeringDocs/final/logsift-architecture/04-layer-3-rag-and-code-context.md
+
+No external assets or externally sourced claims are used.
