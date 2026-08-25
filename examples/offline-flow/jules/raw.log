@@ -1,9 +1,0 @@
-JULES_PIPELINE format=v2 pipeline_id=payments-ci
-2026-08-25T08:00:01+00:00 [stage=build attempt=1] \\u001b[32mINFO\\u001b[0m Building payment-api build=7312
-2026-08-25T08:00:02+00:00 [stage=build attempt=1] Downloading https://demo-user:demo-pass@packages.example.test/payment-api/a81fd9.jar in 812ms
-2026-08-25T08:00:03+00:00 [stage=build attempt=1] access_token=sample-token-not-real upload authorized
-2026-08-25T08:00:04+00:00 [stage=build attempt=1] Compiled 452 files
-2026-08-25T08:01:00+00:00 [stage=test attempt=1] request=550e8400-e29b-41d4-a716-446655440000 started from 10.4.8.2
-2026-08-25T08:01:13+00:00 [stage=test attempt=1] PaymentServiceTest passed=124 failed=0 duration=12.8s
-2026-08-25T08:01:15+00:00 [stage=package attempt=1] Created /tmp/build-7312/payment-api-a81fd9.jar
-2026-08-25T08:01:16+00:00 [stage=package attempt=1] Pipeline completed exit code=0
