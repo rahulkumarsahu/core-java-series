@@ -1,426 +1,447 @@
-The main point is: **Logsift should not keep complete segments or complete logs in memory.** It should keep the raw log in persistent storage, build a small searchable index beside it, and load only the required part of the log when evidence needs expansion.
+Yes, we should use both a **candidate pool** and an **index**. They solve different problems:
 
-The repository does not fully define this mechanism yet, so the following is the recommended design.
+- The candidate pool records **what looks suspicious**.
+- The index records **where the original evidence is located**.
 
-## 1. What “indexed content expansion” means
+A candidate pool cannot replace the index. If a candidate only says “line 50,000 is suspicious,” Logsift may need to scan from the beginning of a large text file to locate that line. If the candidate contains a byte pointer produced by the index, Logsift can read the relevant region directly.
 
-Suppose LogDiff finds this new failed-run template:
+## Recommended overall design
 
-```text
-Connection to <HOST> timed out after <DURATION>
-```
-
-That template tells us what changed, but it may not explain why. Logsift now needs the surrounding lines:
+The index should not be a separate full pass before failure preprocessing. It should be created **while the log is being ingested and preprocessed**.
 
 ```text
-Starting database migration
-Connecting to database-primary
-Retry 1 of 3
-Connection timed out after 30 seconds
-Migration failed
-```
-
-Loading those nearby lines is **content expansion**.
-
-Finding them using stored line, byte, stage, node, timestamp, and correlation information is **indexed content expansion**.
-
-So the flow is:
-
-```text
-New template
+Failed log arrives
     ↓
-Find its exact occurrence pointer
+Streaming source detection and ingestion
+    ├── Store immutable raw-log chunks
+    ├── Build sidecar index
+    └── Run the shared preprocessing pipeline
+            Normalize
+            Redact
+            Mask
+            Segment
+            Drain
     ↓
-Look in the sidecar index
+Commit run manifest: preprocessing complete
     ↓
-Read only the required byte ranges
+LogDiff
     ↓
-Create an evidence block
+Candidate pool
+    ↓
+Indexed content expansion
+    ↓
+Log blocks
+    ↓
+Deduplicate → score → token selection
 ```
 
-## 2. Raw log and sidecar index
+This avoids reading the complete log twice.
 
-They are two separate stored artifacts.
+## Separate the common pipeline from offline learning
 
-### Raw log
+The terms “offline flow” and “online flow” can be confusing. I recommend separating them conceptually into three parts.
 
-The raw log contains the original text and is stored in restricted persistent storage, such as object storage.
+### 1. Common ingestion and preprocessing
+
+This runs for both successful and failed logs:
 
 ```text
-raw-logs/run-7842/build.log
+Detect source
+→ Parse envelope
+→ Store raw log
+→ Normalize
+→ Redact
+→ Mask
+→ Segment
+→ Drain
+→ Build indexes and occurrence records
 ```
 
-Logsift does not normally load this whole file into memory.
+It creates run-level artifacts but does not decide whether the baseline should change.
 
-### Sidecar index
+### 2. Successful-run learning
 
-The sidecar index is a much smaller searchable map created while Logsift reads the log during ingestion.
+This runs only when the run is:
 
-Example:
+- Complete
+- Successful
+- From a trusted branch
+- Detected as Jules or Lattice
+- Processed with compatible rule and parser versions
 
-| Lines | Bytes | Scope | Template | Timestamp |
-|---|---:|---|---|---|
-| 1–58 | 0–4,920 | Build | multiple | 10:01–10:03 |
-| 59–142 | 4,921–12,480 | Test | multiple | 10:03–10:08 |
-| 143–180 | 12,481–15,300 | Package | multiple | 10:08–10:10 |
+It publishes or updates the success baseline.
 
-For individual template occurrences, the index may contain:
+### 3. Failed-run analysis
 
-```yaml
-run_id: run-7842
-log_object_id: log-991
-source_type: JULES
-segment_type: stage
-segment_id: test
-attempt: 1
+This uses the same preprocessing versions but:
 
-physical_line: 126
-byte_start: 10840
-byte_end: 10924
+- Uses the frozen Drain configuration
+- Does not train or update the baseline
+- Compares failed-run occurrences with the baseline
+- Creates candidates
+- Expands and ranks evidence
 
-logical_sequence: 63
-template_fingerprint: fp-a91c72
-timestamp: "10:07:42"
-correlation_id: request-17
-```
+So “same offline preprocessing” should mean **the same deterministic preprocessing pipeline**, not “update the success baseline.”
 
-This is called a “sidecar” because it is stored beside the raw log and describes where useful information can be found.
+## When should the index be built?
 
-## 3. Are segments stored in memory?
+Build it while the log is being read for the first time.
 
-Not permanently.
-
-There are three different things that should not be confused:
-
-1. **Segment definition**
-
-   A small record saying which lines belong to a Jules stage or Lattice node.
-
-2. **Template occurrences**
-
-   Small records that say where each template appeared.
-
-3. **Segment content**
-
-   The actual log text.
-
-Only the first two need to be persisted as compact metadata. The actual text remains in the raw-log file.
-
-A worker may temporarily hold one chunk in memory:
+For each chunk, Logsift can do this:
 
 ```text
-Read 4 MiB → process it → write index records → release memory → read next chunk
+Read bounded chunk
+    ↓
+Capture line and byte positions
+    ↓
+Identify Jules stage or Lattice node
+    ↓
+Normalize, mask and parse lines
+    ↓
+Write index and occurrence records
+    ↓
+Release chunk from memory
 ```
 
-Memory usage therefore depends on configured chunk size and active workers, not total log size.
+When the terminal pipeline event arrives, much of the indexing may already be complete. Logsift only needs to finalize the run manifest and start LogDiff.
 
-For example:
+If an older log has no index, Logsift can perform a one-time index-building scan before analysis. It should not rescan the log separately for every candidate.
 
-```text
-4 MiB chunk × 10 active workers ≈ 40 MiB of raw chunk data
-```
+## What should the sidecar index contain?
 
-A 20 GB log still does not require 20 GB of memory.
+We do not necessarily need a large database row for every character or token. A practical index can combine chunk-level and occurrence-level records.
 
-## 4. How Logsift finds a segment for the current run
+### Chunk index
 
-There are two separate identities.
-
-The baseline family key remains:
-
-```text
-seal_id + project_id + repo_id + source_type
-```
-
-That key finds the appropriate repo-level success baseline.
-
-But a log occurrence needs a run-specific address:
-
-```text
-seal_id
-+ project_id
-+ repo_id
-+ source_type
-+ pipeline_run_id
-+ log_object_id
-+ stage_or_node
-+ attempt
-+ line_or_byte_range
-```
-
-For failure analysis, Logsift also adds:
-
-```text
-analysis_id
-```
-
-For example:
+One record for every reasonably sized log chunk:
 
 ```yaml
 seal_id: seal-12
 project_id: project-84
 repo_id: repo-31
 source_type: LATTICE
-
-pipeline_run_id: run-7842
-analysis_id: analysis-a17
+run_id: run-7842
 log_object_id: log-991
 
-node_id: integration-tests
+chunk_id: chunk-17
+line_start: 16001
+line_end: 17000
+byte_start: 1384200
+byte_end: 1478100
+
+first_timestamp: "10:07:10"
+last_timestamp: "10:07:51"
+```
+
+This lets Logsift find the right general region quickly.
+
+### Segment index
+
+This records where each Jules stage or Lattice node appears.
+
+For Jules:
+
+```yaml
+segment_type: stage
+segment_id: test
+attempt: 1
+line_start: 1200
+line_end: 8900
+byte_start: 104200
+byte_end: 781400
+```
+
+For Lattice:
+
+```yaml
+segment_type: node
+segment_id: integration-tests
 attempt: 2
-line_start: 2180
-line_end: 2180
-byte_start: 184200
-byte_end: 184310
+physical_ranges:
+  - byte_start: 184200
+    byte_end: 184900
+  - byte_start: 186400
+    byte_end: 187100
+  - byte_start: 192200
+    byte_end: 193800
 ```
 
-Logsift can now ask:
+A Lattice node may have several physical ranges because output from parallel nodes can be interleaved.
 
-> For `analysis-a17`, expand the occurrence in `run-7842`, node `integration-tests`, attempt 2, around byte 184200.
+### Template-occurrence index
 
-It cannot accidentally read the same-looking segment from another run because the complete run-specific address is required.
+This connects Drain results to exact locations:
 
-## 5. Jules and Lattice expansion are different
-
-For Jules, physical order usually follows stage order:
-
-```text
-Build → Test → Package
+```yaml
+template_fingerprint: fp-a91c72
+segment_id: integration-tests
+attempt: 2
+physical_line: 16428
+logical_sequence: 219
+byte_start: 1418920
+byte_end: 1419018
+timestamp: "10:07:42"
+correlation_id: request-17
 ```
 
-A Jules expansion can read a continuous range around the suspicious line, but it must stop at the stage boundary.
+These can be stored as compact, append-only records rather than large mutable objects.
 
-For Lattice, several nodes may write interleaved physical lines:
+## Candidate pool structure
 
-```text
-Line 100: node-A
-Line 101: node-B
-Line 102: node-A
-Line 103: node-C
-Line 104: node-A
-```
-
-If the candidate belongs to `node-A`, blindly reading lines 95–110 would mix unrelated node output.
-
-Instead, Logsift uses the sidecar index to collect entries belonging to:
-
-```text
-run_id = run-7842
-node_id = node-A
-attempt = 1
-```
-
-It may read several small physical ranges and then reconstruct the node’s logical order. The evidence block still retains every original physical line and byte location.
-
-## 6. Isolation when many analyses run in parallel
-
-Every analysis gets its own isolated partition:
-
-```text
-tenant
-└── seal
-    └── project
-        └── repository
-            └── run
-                └── analysis_id
-```
-
-For example:
-
-```text
-analysis-a17 → run-7842
-analysis-b29 → run-9210
-analysis-c41 → run-7842
-```
-
-Even if two analyses inspect the same failed run, their candidates are stored separately:
-
-```text
-candidate-pool/run-7842/analysis-a17/
-candidate-pool/run-7842/analysis-c41/
-```
-
-The shared artifacts are read-only:
-
-- Raw log
-- Sidecar index
-- Compatible success baseline
-
-Analysis-specific artifacts are isolated:
-
-- LogDiff results
-- Candidate references
-- Expanded ranges
-- Evidence blocks
-- Scores
-- Token selections
-
-A worker must always receive `analysis_id` and `run_id`. It must never use a global in-memory candidate list.
-
-A useful candidate identity is:
-
-```text
-analysis_id
-+ run_id
-+ scope
-+ template_fingerprint
-+ occurrence location
-```
-
-This prevents candidate records from two analyses from being mixed.
-
-## 7. Controlling memory and worker load
-
-Logsift should enforce limits at several levels:
-
-- Fixed input chunk size
-- Maximum active chunks per worker
-- Maximum concurrent workers per tenant
-- Maximum candidates per analysis
-- Maximum expanded bytes per candidate
-- Maximum evidence-block size
-- Queue backpressure
-- Fair scheduling between small and large runs
-- Cancellation checks between reads
-- Expiration of temporary analysis records
-
-If the system is overloaded, it should queue work rather than increasing memory without a limit.
-
-A worker lease also prevents two workers from unintentionally processing the same candidate. If a worker crashes, the lease expires and another worker can safely retry.
-
-## 8. What happens when an unmatched template is found
-
-Assume the failed run produces:
-
-```text
-Template: Connection to <HOST> timed out after <DURATION>
-Fingerprint: fp-a91c72
-```
-
-LogDiff looks for `fp-a91c72` in the compatible success baseline.
-
-If it is absent:
-
-```text
-classification = NEW_TEMPLATE
-```
-
-Logsift then creates a candidate reference:
+The candidate pool should contain references, not copied raw-log blocks.
 
 ```yaml
 analysis_id: analysis-a17
 candidate_id: candidate-108
 
-classification: new_template
-template_fingerprint: fp-a91c72
-
+seal_id: seal-12
+project_id: project-84
+repo_id: repo-31
+source_type: LATTICE
 run_id: run-7842
 log_object_id: log-991
-source_type: JULES
-stage_id: test
-attempt: 1
 
-line_start: 126
-line_end: 126
-byte_start: 10840
-byte_end: 10924
+reason:
+  type: new_template
+  template_fingerprint: fp-a91c72
+
+scope:
+  node_id: integration-tests
+  attempt: 2
+
+location:
+  physical_line: 16428
+  logical_sequence: 219
+  byte_start: 1418920
+  byte_end: 1419018
+
+status: waiting_for_expansion
 ```
 
-The full text is not copied into the candidate pool.
+A candidate record is small. Even thousands of candidates use much less memory than copied log blocks.
 
-Next, content expansion uses the pointer:
+## How content expansion works
+
+Suppose LogDiff produces this candidate:
 
 ```text
-Candidate line 126
-    ↓
-Sidecar lookup
-    ↓
-Same Test stage
-    ↓
-Lines 116–136
-    ↓
-Extend to include complete stack trace
-    ↓
-Range-read required bytes
-    ↓
-Evidence block
+run: run-7842
+node: integration-tests
+attempt: 2
+line: 16428
+bytes: 1418920–1419018
 ```
 
-The evidence block is then deduplicated, scored, ranked, and considered for the token budget.
+The expansion worker:
 
-Most importantly, because the run failed:
+1. Loads the candidate reference.
+2. Queries the sidecar index using the same run, node and attempt.
+3. Finds nearby logical records.
+4. Extends the range to include a complete stack trace or request flow.
+5. Reads only the required raw-log chunks.
+6. Creates an evidence block.
+7. Releases the raw chunk from memory.
+
+For Jules, it normally expands within the same contiguous stage.
+
+For Lattice, it collects the same node and attempt, even if those lines are physically separated by other nodes’ output.
+
+## How simultaneous analyses remain isolated
+
+Use two levels of identity.
+
+### Shared baseline identity
 
 ```text
-The new template does not update the success baseline.
+seal_id + project_id + repo_id + source_type
 ```
 
-It exists only in the failed-run analysis unless it later appears in an eligible trusted successful run.
+This selects the repo-level baseline family.
 
-## 9. Avoiding thousands of unmatched candidates
-
-A parser or version problem could make nearly every line appear new. Logsift should not expand all of them.
-
-First, it checks compatibility:
-
-- Same source schema version
-- Same normalization-rule version
-- Same masking-rule version
-- Same parser type and version
-- Compatible baseline manifest
-
-If these are incompatible, Logsift should refuse normal LogDiff rather than reporting thousands of false differences.
-
-If versions are compatible but many genuine new occurrences exist, Logsift groups them by:
+### Analysis identity
 
 ```text
-template fingerprint + stage or node + attempt
+seal_id
++ project_id
++ repo_id
++ source_type
++ run_id
++ analysis_id
 ```
 
-For example, 5,000 identical timeout occurrences become one candidate group:
+Every temporary operation must include `run_id` and `analysis_id`.
+
+For example:
+
+```text
+run-7842 / analysis-a17 / candidates
+run-7842 / analysis-b29 / candidates
+run-9210 / analysis-c41 / candidates
+```
+
+Two analyses may share these immutable, read-only artifacts:
+
+- Raw log
+- Sidecar index
+- Failed-run template occurrences
+- Compatible success baseline
+
+But they must not share mutable analysis state:
+
+- Candidate status
+- Expanded blocks
+- Scores
+- Selected evidence
+- Token-budget calculations
+- Cancellation state
+
+No worker should keep a global candidate list in process memory.
+
+## Recommended processing state
+
+Store the analysis state durably:
+
+```text
+CREATED
+→ WAITING_FOR_INDEX
+→ READY_FOR_DIFF
+→ DIFF_COMPLETE
+→ EXPANDING
+→ RANKING
+→ EVIDENCE_READY
+```
+
+Workers claim small pieces of work using short leases.
+
+For example:
+
+```yaml
+candidate_id: candidate-108
+status: expanding
+lease_owner: worker-7
+lease_expires_at: "10:09:30"
+version: 4
+```
+
+If the worker crashes, the lease expires and another worker retries. The output uses an idempotency key, so the retry does not create a second evidence block.
+
+## Memory-efficient worker design
+
+Each worker should have hard limits:
+
+```yaml
+input_chunk_size: 4 MiB
+maximum_chunks_in_memory: 2
+maximum_expansion_per_candidate: 256 KiB
+maximum_evidence_block: 32 KiB
+maximum_candidates_per_batch: 100
+```
+
+A worker might therefore use approximately:
+
+```text
+2 × 4 MiB input chunks
++ small candidate metadata
++ bounded output buffer
+```
+
+Its memory usage remains bounded even if the source log is 50 GB.
+
+Also use:
+
+- Backpressure when the queue is full
+- Per-tenant concurrency limits
+- Fair scheduling between large and small runs
+- Cancellation checks between reads
+- Candidate and analysis expiration
+- Maximum expanded bytes per analysis
+
+## Handling a new unmatched template
+
+Suppose Drain produces:
+
+```text
+Canonical template:
+Connection to <HOST> timed out after <DURATION>
+
+Fingerprint:
+fp-a91c72
+```
+
+If the compatible baseline does not contain that fingerprint:
+
+```text
+classification = new_template
+```
+
+Logsift should then:
+
+1. Group occurrences by fingerprint and scope.
+2. Count all occurrences.
+3. Keep the first, last and a few representative pointers.
+4. Create one candidate group.
+5. Expand only representative occurrences.
+6. Score the resulting evidence blocks.
+7. Never update the baseline from this failed run.
+
+For example:
 
 ```yaml
 template_fingerprint: fp-a91c72
+scope:
+  node_id: integration-tests
+  attempt: 2
+
 occurrence_count: 5000
-first_occurrence: line 126
-last_occurrence: line 9120
-representative_occurrences:
-  - line 126
-  - line 4800
-  - line 9120
+first_occurrence:
+  line: 16428
+  byte_start: 1418920
+
+last_occurrence:
+  line: 48210
+  byte_start: 4219030
+
+representatives:
+  - line: 16428
+  - line: 29711
+  - line: 48210
 ```
 
-Only a few representative locations are expanded.
+This prevents 5,000 repeated failures from becoming 5,000 expansion jobs.
 
-## Simplified complete picture
+## Failure protection
+
+If nearly every template appears new, Logsift should first check:
+
+- Baseline key
+- Source type
+- Source-schema version
+- Normalization-rule version
+- Masking-rule version
+- Drain configuration and version
+- Fingerprint version
+
+If versions differ incompatibly, it should stop normal LogDiff:
 
 ```text
-Large failed log
-    ↓ chunked ingestion
-Restricted raw-log storage
-    +
-Small sidecar index
-    ↓
-Same frozen preprocessing
-    ↓
-Template occurrences with exact pointers
-    ↓
-LogDiff against compatible repo-level baseline
-    ↓
-New or suspicious fingerprint
-    ↓
-Candidate reference stored under run_id + analysis_id
-    ↓
-Sidecar index finds stage/node and nearby ranges
-    ↓
-Only those raw-log byte ranges are read
-    ↓
-Evidence block
-    ↓
-Deduplicate → score → token selection
+Analysis stopped:
+failed run and baseline were produced by incompatible preprocessing versions
 ```
 
-So the design has three important protections:
+It should not generate thousands of misleading candidates.
 
-- **Memory safety:** only bounded chunks and selected ranges enter memory.
-- **Analysis isolation:** every request is scoped by `run_id` and `analysis_id`.
-- **Correct expansion:** every candidate carries exact raw-log, byte, line, stage/node, and attempt provenance.
+## Recommended decision
+
+The strongest design is:
+
+- Build indexes during common ingestion, not in a separate repeated flow.
+- Persist raw logs and index records; do not persist complete segments in memory.
+- Use a candidate pool containing exact references.
+- Partition mutable state by `run_id + analysis_id`.
+- Share only immutable raw logs, indexes and baselines.
+- Process candidates using bounded workers and short leases.
+- Group repeated unmatched templates before expansion.
+- Read only indexed raw-log ranges.
+- Never update the baseline from failed-run candidates.
+
+This keeps the LogSage filtering-and-expansion idea while adding the missing distributed-system behavior required for speed, isolation, and predictable memory usage.
