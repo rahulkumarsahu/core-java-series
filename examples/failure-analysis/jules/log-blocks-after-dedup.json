@@ -1,0 +1,37 @@
+{
+  "schema_version": "deduplicated-log-blocks/v1",
+  "analysis_id": "analysis-01HX",
+  "stage": "after_deduplication",
+  "input_block_count": 2,
+  "output_block_count": 1,
+  "blocks": [
+    {
+      "block_id": "dedup-block-timeout-chain",
+      "representative_block_id": "block-test-attempt-1",
+      "collapsed_block_ids": ["block-test-attempt-1", "block-test-attempt-2"],
+      "dedup_method": "exact_protected_content_and_template_sequence",
+      "occurrence_count": 2,
+      "first_occurrence": {"attempt": 1, "line_start": 3, "line_end": 9, "byte_start": 127, "byte_end": 663},
+      "last_occurrence": {"attempt": 2, "line_start": 10, "line_end": 16, "byte_start": 663, "byte_end": 1199},
+      "affected_scopes": [
+        {"kind": "stage", "name": "test", "attempt": 1},
+        {"kind": "stage", "name": "test", "attempt": 2}
+      ],
+      "all_source_ranges": [
+        {"log_object_id": "log-f-9001-v1", "line_start": 3, "line_end": 9, "byte_start": 127, "byte_end": 663},
+        {"log_object_id": "log-f-9001-v1", "line_start": 10, "line_end": 16, "byte_start": 663, "byte_end": 1199}
+      ],
+      "representative_examples": ["block-test-attempt-1", "block-test-attempt-2"],
+      "content_lines": [
+        "Starting test request <REQUEST_ID>",
+        "Connecting to payments-db",
+        "Connection attempt 1 failed",
+        "Connection attempt 2 failed",
+        "TimeoutError after 40.0s request=<REQUEST_ID>",
+        "PaymentServiceTest passed=87 failed=37 duration=41.8s",
+        "Worker exited code=1"
+      ],
+      "dedup_note": "The repeated test attempt is shown once, but both attempts and all raw-log pointers are retained."
+    }
+  ]
+}

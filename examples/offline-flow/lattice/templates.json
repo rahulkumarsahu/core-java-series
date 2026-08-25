@@ -1,0 +1,92 @@
+{
+  "schema_version": "template-catalog/v1",
+  "fingerprint_version": "fingerprint/v1",
+  "fingerprint_input": "fingerprint_version + newline + canonical_template",
+  "baseline_key": {
+    "seal_id": "seal101",
+    "project_id": "payments",
+    "repo_id": "payment-api",
+    "source_type": "LATTICE"
+  },
+  "event_catalog": {
+    "evt-8821-complete": {
+      "run_id": "run-8821",
+      "pipeline_id": "payments-dag",
+      "branch_class": "release",
+      "commit_sha": "71a9c2e",
+      "observed_at": "2026-08-25T09:10:00Z"
+    }
+  },
+  "templates": [
+    {
+      "fingerprint": "sha256:v1:fa0969eb7991810d4fad9dc3c1de6774ad3443e21f3472c768223617555d2557",
+      "canonical_template": "Compiling payment-api build=<BUILD_ID>",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"compile"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[1]}]
+    },
+    {
+      "fingerprint": "sha256:v1:278e4ecb2c31a6000e40debd1e01875202a9845f5ee9a98e0bc56d9010150f2c",
+      "canonical_template": "request=<REQUEST_ID> started",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"test:integration"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[1]}]
+    },
+    {
+      "fingerprint": "sha256:v1:d4f5cf61bba3780131d11cfcdde52bc24984c5b59aae9e405594ba189ec6d0d6",
+      "canonical_template": "Scanning <COUNT> dependencies",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"security-scan"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[1]}]
+    },
+    {
+      "fingerprint": "sha256:v1:1146b8ac3f71bb6eabdd373aaa36e5c8aae9dc3689ef1e20f8f499ef6fc0f29a",
+      "canonical_template": "Authorization: <REDACTED_TOKEN>",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"test:integration"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[2]}]
+    },
+    {
+      "fingerprint": "sha256:v1:c5910eb89277a37d06fd945f5b7621cc00532a2d2935623d8cbc9026195b1e2d",
+      "canonical_template": "Waiting for compile output",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"package"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[1]}]
+    },
+    {
+      "fingerprint": "sha256:v1:83d33fa2a5acecac76242f47dd516910481dad285dd5fe0f2b6a6ea692203003",
+      "canonical_template": "Connected to <IP_ADDRESS> in <DURATION>",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"test:integration"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[3]}]
+    },
+    {
+      "fingerprint": "sha256:v1:f650209bc99e925043bf0b23e6dd4a084e583916a54686a00b6302112285c75a",
+      "canonical_template": "No critical findings",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"security-scan"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[2]}]
+    },
+    {
+      "fingerprint": "sha256:v1:c670eb20ba7cbec4014f6b6b1751c68641ddab4a5c070cbb11d241eefe9f6160",
+      "canonical_template": "PaymentServiceTest passed=<COUNT> failed=0 duration=<DURATION>",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"test:integration"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[4]}]
+    },
+    {
+      "fingerprint": "sha256:v1:3156a32efa795df7b241dd3e75dc5784409ef33e71c22268f63c61f8c781bf14",
+      "canonical_template": "Created <TEMP_PATH>/payment-api-<ARTIFACT_HASH>.jar",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"package"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[2]}]
+    },
+    {
+      "fingerprint": "sha256:v1:a2ce6c0558ae9b320c7259508d4f2940f90fef279c2d9e92fc13de4b11d62d09",
+      "canonical_template": "Worker exited code=0",
+      "first_seen_event_id": "evt-8821-complete",
+      "last_seen_event_id": "evt-8821-complete",
+      "scope_statistics": [{"branch_class":"release","scope":{"kind":"dag_node","name":"test:integration"},"success_run_support":1,"count_per_run":{"min":1,"max":1},"normal_positions":[5]}]
+    }
+  ]
+}

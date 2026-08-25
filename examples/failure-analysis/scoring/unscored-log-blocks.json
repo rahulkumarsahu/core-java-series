@@ -1,0 +1,141 @@
+{
+  "schema_version": "log-blocks/v1",
+  "analysis_id": "analysis-03SC",
+  "run_id": "run-f-9200",
+  "blocks": [
+    {
+      "block_id": "block-primary-timeout",
+      "scope": {"kind": "stage", "name": "test", "attempt": 2},
+      "category": "primary_exception",
+      "signals": ["new_template", "first_correlated_timeout", "failed_request", "exception_chain"],
+      "occurrence_count": 1,
+      "diagnostic_density_input": {
+        "candidate_line_weight_sum": 20,
+        "expanded_line_count": 14,
+        "expansion_order": "logical",
+        "basis": "representative_expanded_block_before_compaction",
+        "calculated_density": 1.43
+      },
+      "content_lines": [
+        "Starting integration request <REQUEST_ID>",
+        "Connecting to payments-db.internal:5432",
+        "TimeoutError after 40.0s request=<REQUEST_ID>",
+        "caused by ConnectionPoolExhausted: no connection available",
+        "PaymentServiceIT FAILED"
+      ],
+      "source_ranges": [
+        {"log_object_id": "log-f-9200-v1", "line_start": 920, "line_end": 933, "byte_start": 74210, "byte_end": 75690}
+      ]
+    },
+    {
+      "block_id": "block-upstream-config",
+      "scope": {"kind": "stage", "name": "prepare", "attempt": 1},
+      "category": "configuration",
+      "signals": ["upstream_dependency_signal", "same_database_entity"],
+      "occurrence_count": 1,
+      "diagnostic_density_input": {
+        "candidate_line_weight_sum": 3,
+        "expanded_line_count": 5,
+        "expansion_order": "logical",
+        "basis": "representative_expanded_block_before_compaction",
+        "calculated_density": 0.60
+      },
+      "content_lines": [
+        "Loading integration profile payment-test",
+        "Database alias payments-primary resolved to payments-db.internal",
+        "Pool size configured as 2 for integration workers",
+        "Configuration validation completed with warning"
+      ],
+      "source_ranges": [
+        {"log_object_id": "log-f-9200-v1", "line_start": 700, "line_end": 704, "byte_start": 56110, "byte_end": 56580}
+      ]
+    },
+    {
+      "block_id": "block-failed-test-summary",
+      "scope": {"kind": "stage", "name": "test", "attempt": 2},
+      "category": "failed_test_summary",
+      "signals": ["failed_test_summary", "nonzero_failure_count"],
+      "occurrence_count": 1,
+      "diagnostic_density_input": {
+        "candidate_line_weight_sum": 10,
+        "expanded_line_count": 5,
+        "expansion_order": "logical",
+        "basis": "representative_expanded_block_before_compaction",
+        "calculated_density": 2.00
+      },
+      "content_lines": [
+        "PaymentServiceIT tests=124 passed=87 failed=37",
+        "Test stage marked failed"
+      ],
+      "source_ranges": [
+        {"log_object_id": "log-f-9200-v1", "line_start": 961, "line_end": 965, "byte_start": 77980, "byte_end": 78330}
+      ]
+    },
+    {
+      "block_id": "block-terminal-exit",
+      "scope": {"kind": "stage", "name": "test", "attempt": 2},
+      "category": "terminal_failure",
+      "signals": ["nonzero_terminal_exit"],
+      "occurrence_count": 1,
+      "diagnostic_density_input": {
+        "candidate_line_weight_sum": 13,
+        "expanded_line_count": 2,
+        "expansion_order": "logical",
+        "basis": "representative_expanded_block_before_compaction",
+        "calculated_density": 6.50
+      },
+      "content_lines": [
+        "Test worker exited code=1",
+        "Pipeline stopped after failed test stage"
+      ],
+      "source_ranges": [
+        {"log_object_id": "log-f-9200-v1", "line_start": 970, "line_end": 971, "byte_start": 78720, "byte_end": 78870}
+      ]
+    },
+    {
+      "block_id": "block-retry-loop",
+      "scope": {"kind": "stage", "name": "test", "attempt": 2},
+      "category": "retry_loop",
+      "signals": ["frequency_shift", "same_database_entity", "repeated_failure"],
+      "occurrence_count": 12,
+      "diagnostic_density_input": {
+        "candidate_line_weight_sum": 41,
+        "expanded_line_count": 27,
+        "expansion_order": "logical",
+        "basis": "representative_expanded_block_before_compaction",
+        "calculated_density": 1.52
+      },
+      "content_lines": [
+        "Connection attempt 1 failed",
+        "Connection attempts 2 through 11 repeated the same failure",
+        "Connection attempt 12 failed",
+        "Retry budget exhausted"
+      ],
+      "source_ranges": [
+        {"log_object_id": "log-f-9200-v1", "line_start": 934, "line_end": 960, "byte_start": 75690, "byte_end": 77980}
+      ]
+    },
+    {
+      "block_id": "block-cache-warning",
+      "scope": {"kind": "stage", "name": "build", "attempt": 1},
+      "category": "routine_warning",
+      "signals": ["frequency_shift", "repeated_warning"],
+      "occurrence_count": 30,
+      "diagnostic_density_input": {
+        "candidate_line_weight_sum": 90,
+        "expanded_line_count": 30,
+        "expansion_order": "logical",
+        "basis": "representative_expanded_block_before_compaction",
+        "calculated_density": 3.00
+      },
+      "content_lines": [
+        "Remote build cache unavailable",
+        "Using local cache fallback",
+        "Build completed successfully after repeated cache warnings"
+      ],
+      "source_ranges": [
+        {"log_object_id": "log-f-9200-v1", "line_start": 220, "line_end": 249, "byte_start": 17400, "byte_end": 19680}
+      ]
+    }
+  ]
+}

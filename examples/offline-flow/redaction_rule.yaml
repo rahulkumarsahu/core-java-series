@@ -1,0 +1,50 @@
+# Safe examples only. Every credential value below is synthetic.
+schema_version: "redaction-rules/v1"
+rule_version: "1.0.0"
+
+execution:
+  deterministic: true
+  order: "priority_then_rule_id"
+  fail_closed: true
+  store_matched_secret: false
+
+rules:
+  - rule_id: "redact-authorization-header-v1"
+    priority: 100
+    enabled: true
+    sources: [JULES, LATTICE]
+    match:
+      type: "regex"
+      pattern: '(?i)Authorization:\s*(?:Bearer|Basic)\s+\S+'
+    replacement: "Authorization: <REDACTED_TOKEN>"
+    category: "authorization_header"
+
+  - rule_id: "redact-key-value-token-v1"
+    priority: 110
+    enabled: true
+    sources: [JULES, LATTICE]
+    match:
+      type: "regex"
+      pattern: '(?i)\b(?:access_token|api_key|password|client_secret)\s*[=:]\s*\S+'
+    replacement: "<REDACTED_TOKEN>"
+    category: "credential_value"
+
+  - rule_id: "redact-url-credentials-v1"
+    priority: 120
+    enabled: true
+    sources: [JULES, LATTICE]
+    match:
+      type: "regex"
+      pattern: '(?<scheme>https?)://[^/@\s]+@(?<host>[^/\s]+)'
+    replacement: "${scheme}://<REDACTED_CREDENTIAL>@${host}"
+    category: "url_credentials"
+
+validation:
+  require_unique_rule_ids: true
+  reject_replacement_that_contains_secret_capture: true
+  audit_fields: [rule_id, category, physical_line, match_count]
+  tests:
+    - name: "remove synthetic bearer token"
+      input: "Authorization: Bearer sample-token-not-real"
+      expected: "Authorization: <REDACTED_TOKEN>"
+      forbidden_output: ["sample-token-not-real"]

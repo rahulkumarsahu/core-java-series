@@ -1,0 +1,45 @@
+# Recommended structure. The project does not define this runtime contract yet.
+schema_version: "normalize-rules/v1"
+rule_version: "1.0.0"
+
+execution:
+  deterministic: true
+  order: "priority_then_rule_id"
+  input_encoding: "UTF-8"
+  preserve_physical_provenance: true
+  max_rule_match_ratio: 0.40
+
+rules:
+  - rule_id: "normalize-ansi-v1"
+    priority: 100
+    enabled: true
+    sources: [JULES, LATTICE]
+    match:
+      type: "ansi_escape"
+    actions:
+      - operation: "remove_match"
+
+  - rule_id: "normalize-timestamp-prefix-v1"
+    priority: 110
+    enabled: true
+    sources: [JULES, LATTICE]
+    match:
+      type: "regex"
+      pattern: '^(?<timestamp>\S+)\s+(?<message>.*)$'
+    actions:
+      - operation: "parse_timestamp"
+        from: "${timestamp}"
+        store_as: "observed_at"
+      - operation: "replace_message"
+        value: "${message}"
+
+validation:
+  require_unique_rule_ids: true
+  reject_empty_patterns: true
+  reject_if_line_or_byte_provenance_is_lost: true
+  tests:
+    - name: "remove ANSI and extract timestamp"
+      input: '2026-08-25T08:00:01+00:00 \\u001b[32mINFO\\u001b[0m Build 7312'
+      expected_message: "INFO Build 7312"
+      expected_metadata:
+        observed_at: "2026-08-25T08:00:01Z"

@@ -1,0 +1,45 @@
+{
+  "schema_version": "baseline-manifest/v1",
+  "baseline_key": {
+    "seal_id": "seal101",
+    "project_id": "payments",
+    "repo_id": "payment-api",
+    "source_type": "LATTICE"
+  },
+  "baseline_version": "v1",
+  "status": "complete",
+  "authoritative_branch_class": "main",
+  "branch_classes": ["release"],
+  "successful_events": [
+    {
+      "event_id": "evt-8821-complete",
+      "run_id": "run-8821",
+      "pipeline_id": "payments-dag",
+      "branch": "release/2026.08",
+      "branch_class": "release",
+      "commit_sha": "71a9c2e",
+      "observed_at": "2026-08-25T09:10:00Z"
+    }
+  ],
+  "compatibility": {
+    "source_schema": "lattice/v3",
+    "normalization_rules": "1.0.0",
+    "redaction_rules": "1.0.0",
+    "masking_rules": "1.0.0",
+    "segmentation": "segment/v1",
+    "parser": "drain/v1",
+    "fingerprint": "fingerprint/v1"
+  },
+  "artifacts": {
+    "template_catalog": "templates.json",
+    "parser_state": "state.json",
+    "run_segments": "runs/run-8821/segment-groups.json",
+    "run_sidecar_index": "runs/run-8821/sidecar-index.jsonl"
+  },
+  "publish_checks": {
+    "log_complete": true,
+    "trusted_branch": true,
+    "redaction_verified": true,
+    "all_artifacts_complete": true
+  }
+}

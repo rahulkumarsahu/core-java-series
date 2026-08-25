@@ -1,0 +1,59 @@
+{
+  "schema_version": "logdiff-result/v1",
+  "analysis_id": "analysis-01HX",
+  "run_id": "run-f-9001",
+  "baseline_version": "baseline-v12",
+  "compatibility": {"status": "compatible", "mismatches": []},
+  "scope": {"kind": "stage", "name": "test"},
+  "results": [
+    {
+      "fingerprint": "sha256:v1:d47ce03fa1324c82025a83654aceb83c03a8e0de5521b313139faafc1897f6e4",
+      "result": "match",
+      "candidate_selected": false
+    },
+    {
+      "fingerprint": "sha256:v1:1cce0cc402166de424e21fddf0899cd3aa4b106f42b5393ddec69a13db6529eb",
+      "result": "match",
+      "candidate_selected": false
+    },
+    {
+      "fingerprint": "sha256:v1:be5e4741546d565fd0c80fa35674ec7ade5b4525d6fa0e9936f1a5dbf7f8e724",
+      "result": "frequency_shift",
+      "baseline_max_per_attempt": 1,
+      "failed_count_per_attempt": 2,
+      "candidate_selected": true,
+      "selected_occurrence_ids": ["occ-f-5", "occ-f-6", "occ-f-12", "occ-f-13"]
+    },
+    {
+      "fingerprint": "sha256:v1:c3daa8069d6ca9af1f9e91180a2362e27e51fdf870bc5419fe7d145f5d7a704d",
+      "result": "new_template",
+      "severity": "error",
+      "candidate_selected": true,
+      "selected_occurrence_ids": ["occ-f-7", "occ-f-14"]
+    },
+    {
+      "fingerprint": "sha256:v1:68fee25ad70c0642f72bb6e34c2fa3e81bdd6e147dc36efb249e9aaee2e004ab",
+      "result": "new_failure_state",
+      "candidate_selected": true,
+      "selected_occurrence_ids": ["occ-f-8", "occ-f-15"]
+    },
+    {
+      "fingerprint": "sha256:v1:aefd63086fcc063a3d28538d571f021ca9b85bc38ccbf7368bbdbd9be7f5676b",
+      "result": "new_terminal_failure",
+      "candidate_selected": true,
+      "selected_occurrence_ids": ["occ-f-9", "occ-f-16"]
+    },
+    {
+      "fingerprint": "sha256:v1:c670eb20ba7cbec4014f6b6b1751c68641ddab4a5c070cbb11d241eefe9f6160",
+      "result": "missing_expected_success_state",
+      "candidate_selected": false,
+      "note": "There is no failed-run occurrence pointer for a missing template."
+    },
+    {
+      "fingerprint": "sha256:v1:a2ce6c0558ae9b320c7259508d4f2940f90fef279c2d9e92fc13de4b11d62d09",
+      "result": "missing_expected_success_end",
+      "candidate_selected": false,
+      "note": "This supports the failure story but cannot create a raw-log candidate by itself."
+    }
+  ]
+}

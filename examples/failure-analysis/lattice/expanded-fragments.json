@@ -1,0 +1,24 @@
+{
+  "schema_version": "expanded-fragments/v1",
+  "analysis_id": "analysis-L-02",
+  "run_id": "run-lf-7001",
+  "fragment_group": {
+    "fragment_group_id": "fragment-group-integration-2",
+    "segment_id": "seg-lf-integration-2",
+    "scope": {"kind": "dag_node", "name": "test:integration", "attempt": 2},
+    "expansion_mode": "segment_logical_window",
+    "window": {"lines_before": 4, "lines_after": 6},
+    "clipped_at_scope_boundary": true,
+    "requested_logical_range": {"start": 1, "end": 5},
+    "fragments": [
+      {"fragment_id": "frag-lf-2", "physical_line": 2, "logical_sequence": 1, "byte_start": 52, "byte_end": 143, "text": "Starting test request <REQUEST_ID>"},
+      {"fragment_id": "frag-lf-4", "physical_line": 4, "logical_sequence": 2, "byte_start": 227, "byte_end": 314, "text": "Connecting to payments-db"},
+      {"fragment_id": "frag-lf-6", "physical_line": 6, "logical_sequence": 3, "byte_start": 393, "byte_end": 495, "text": "TimeoutError after 40.0s request=<REQUEST_ID>"},
+      {"fragment_id": "frag-lf-8", "physical_line": 8, "logical_sequence": 4, "byte_start": 574, "byte_end": 658, "text": "Retry budget exhausted"},
+      {"fragment_id": "frag-lf-10", "physical_line": 10, "logical_sequence": 5, "byte_start": 743, "byte_end": 825, "text": "Worker exited code=1"}
+    ],
+    "assembled_logical_order": ["frag-lf-2", "frag-lf-4", "frag-lf-6", "frag-lf-8", "frag-lf-10"],
+    "excluded_physical_lines": [3, 5, 7, 9],
+    "exclusion_reason": "Those lines belong to security-scan or package, not test:integration."
+  }
+}

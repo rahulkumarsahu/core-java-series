@@ -1,0 +1,47 @@
+{
+  "schema_version": "log-blocks/v1",
+  "analysis_id": "analysis-01HX",
+  "stage": "before_deduplication",
+  "blocks": [
+    {
+      "block_id": "block-test-attempt-1",
+      "scope": {"kind": "stage", "name": "test", "attempt": 1},
+      "candidate_ids": ["cand-a1-retry", "cand-a1-timeout", "cand-a1-suite", "cand-a1-exit"],
+      "source_fragment_ids": ["fragment-test-attempt-1"],
+      "source_ranges": [
+        {"log_object_id": "log-f-9001-v1", "line_start": 3, "line_end": 9, "byte_start": 127, "byte_end": 663}
+      ],
+      "content_lines": [
+        "Starting test request <REQUEST_ID>",
+        "Connecting to payments-db",
+        "Connection attempt 1 failed",
+        "Connection attempt 2 failed",
+        "TimeoutError after 40.0s request=<REQUEST_ID>",
+        "PaymentServiceTest passed=87 failed=37 duration=41.8s",
+        "Worker exited code=1"
+      ],
+      "template_sequence": ["fp-start", "fp-connect", "fp-retry", "fp-retry", "fp-timeout", "fp-suite-failed", "fp-exit-1"],
+      "truncated": false
+    },
+    {
+      "block_id": "block-test-attempt-2",
+      "scope": {"kind": "stage", "name": "test", "attempt": 2},
+      "candidate_ids": ["cand-a2-retry", "cand-a2-timeout", "cand-a2-suite", "cand-a2-exit"],
+      "source_fragment_ids": ["fragment-test-attempt-2"],
+      "source_ranges": [
+        {"log_object_id": "log-f-9001-v1", "line_start": 10, "line_end": 16, "byte_start": 663, "byte_end": 1199}
+      ],
+      "content_lines": [
+        "Starting test request <REQUEST_ID>",
+        "Connecting to payments-db",
+        "Connection attempt 1 failed",
+        "Connection attempt 2 failed",
+        "TimeoutError after 40.0s request=<REQUEST_ID>",
+        "PaymentServiceTest passed=87 failed=37 duration=41.8s",
+        "Worker exited code=1"
+      ],
+      "template_sequence": ["fp-start", "fp-connect", "fp-retry", "fp-retry", "fp-timeout", "fp-suite-failed", "fp-exit-1"],
+      "truncated": false
+    }
+  ]
+}

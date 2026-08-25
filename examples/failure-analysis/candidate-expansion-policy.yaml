@@ -1,0 +1,104 @@
+# Recommended starting policy. The production contract is not implemented yet.
+schema_version: "candidate-expansion-policy/v1"
+policy_id: "logsift-candidate-expansion-v1"
+policy_version: "1.0.0"
+
+candidate_detection:
+  # All enabled routes run independently. Their results are merged by occurrence_id.
+  logdiff:
+    enabled: true
+    include:
+      - "new_template"
+      - "frequency_shift"
+      - "wrong_scope"
+      - "order_change"
+      - "severity_change"
+      - "parameter_shift"
+
+  failure_keywords:
+    enabled: true
+    input_text: "redacted_and_masked"
+    case_insensitive: true
+    require_word_or_phrase_boundary: true
+    terms:
+      - "error"
+      - "fatal"
+      - "panic"
+      - "exception"
+      - "timeout"
+      - "failed"
+      - "no such file"
+    nonzero_exit_is_terminal: true
+
+  log_tail:
+    enabled: true
+    # The worked example keeps the final two logical lines of a failed scope.
+    jules_last_lines_per_failed_stage_attempt: 2
+    lattice_last_lines_per_failed_or_terminal_node_attempt: 2
+    never_cross_scope: true
+
+  merge:
+    identity_field: "occurrence_id"
+    keep_all_detector_names: true
+    keep_all_reason_codes: true
+
+adaptive_line_weight:
+  # C is the unique candidate occurrence count. L is the processed log-line count.
+  focused_mode:
+    maximum_candidate_count: 500
+    maximum_candidate_ratio: 0.70
+    base_candidate_weight: 3
+  broad_mode:
+    base_candidate_weight: 1
+  normal_line_weight: 0
+  failure_keyword_boost: 2
+  strong_terminal_weight: 10
+  maximum_line_weight: 10
+
+expansion_gate:
+  focused_mode_minimum_weight: 1
+  broad_mode_minimum_weight: 3
+  always_expand:
+    - "nonzero_terminal_exit"
+    - "fatal"
+    - "panic"
+  keep_unexpanded_candidates_for_audit: true
+
+content_expansion:
+  primary:
+    mode: "segment_logical_window"
+    lines_before: 4
+    lines_after: 6
+    stop_at_stage_or_node_attempt: true
+    merge_overlapping_windows: true
+    extend_to_complete:
+      - "stack_trace"
+      - "exception_chain"
+      - "failed_test"
+      - "retry_chain"
+      - "correlated_request"
+
+  fallback:
+    mode: "physical_window_fallback"
+    use_when:
+      - "segment_missing"
+      - "segment_confidence_low"
+    lines_before: 4
+    lines_after: 6
+    stop_at_any_proven_boundary: true
+    merge_overlapping_windows: true
+    merge_only_when_same_proven_scope: true
+    mark_lower_confidence: true
+    never_claim_lattice_node_local_order: true
+
+  limits:
+    maximum_expanded_logical_lines_per_region: 200
+    maximum_range_reads_per_region: 64
+    reapply_redaction_before_storing_fragment: true
+
+validation:
+  require_at_least_one_candidate_route: true
+  require_candidate_ratio_range: [0.0, 1.0]
+  require_line_weight_range: [0, 10]
+  require_nonnegative_windows: true
+  reject_empty_keyword_terms: true

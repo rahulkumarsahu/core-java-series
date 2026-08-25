@@ -1,0 +1,93 @@
+{
+  "schema_version": "candidate-discovery/v1",
+  "analysis_id": "analysis-01HX",
+  "run_id": "run-f-9001",
+  "policy_id": "logsift-candidate-expansion-v1",
+  "policy_version": "1.0.0",
+  "processed_log_line_count": 15,
+  "detector_counts": {
+    "logdiff_occurrences": 10,
+    "failure_keyword_occurrences": 6,
+    "log_tail_occurrences": 4,
+    "unique_occurrences_after_merge": 10
+  },
+  "adaptive_weighting": {
+    "candidate_count": 10,
+    "candidate_ratio": 0.667,
+    "mode": "focused",
+    "base_candidate_weight": 3,
+    "minimum_expansion_weight": 1
+  },
+  "occurrences": [
+    {
+      "occurrence_id": "occ-f-5",
+      "selected_by": ["logdiff"],
+      "reasons": ["frequency_shift"],
+      "line_weight": 3,
+      "selected_for_expansion": true
+    },
+    {
+      "occurrence_id": "occ-f-6",
+      "selected_by": ["logdiff"],
+      "reasons": ["frequency_shift"],
+      "line_weight": 3,
+      "selected_for_expansion": true
+    },
+    {
+      "occurrence_id": "occ-f-7",
+      "selected_by": ["logdiff", "failure_keyword"],
+      "reasons": ["new_template", "error_severity", "duration_shift", "failure_keyword:timeout"],
+      "line_weight": 5,
+      "selected_for_expansion": true
+    },
+    {
+      "occurrence_id": "occ-f-8",
+      "selected_by": ["logdiff", "failure_keyword", "log_tail"],
+      "reasons": ["new_failure_state", "failed_test", "failure_keyword:failed", "log_tail"],
+      "line_weight": 5,
+      "selected_for_expansion": true
+    },
+    {
+      "occurrence_id": "occ-f-9",
+      "selected_by": ["logdiff", "failure_keyword", "log_tail"],
+      "reasons": ["new_terminal_failure", "nonzero_exit", "failure_keyword:exit", "log_tail", "nonzero_terminal_exit"],
+      "line_weight": 10,
+      "selected_for_expansion": true
+    },
+    {
+      "occurrence_id": "occ-f-12",
+      "selected_by": ["logdiff"],
+      "reasons": ["frequency_shift"],
+      "line_weight": 3,
+      "selected_for_expansion": true
+    },
+    {
+      "occurrence_id": "occ-f-13",
+      "selected_by": ["logdiff"],
+      "reasons": ["frequency_shift"],
+      "line_weight": 3,
+      "selected_for_expansion": true
+    },
+    {
+      "occurrence_id": "occ-f-14",
+      "selected_by": ["logdiff", "failure_keyword"],
+      "reasons": ["new_template", "error_severity", "duration_shift", "failure_keyword:timeout"],
+      "line_weight": 5,
+      "selected_for_expansion": true
+    },
+    {
+      "occurrence_id": "occ-f-15",
+      "selected_by": ["logdiff", "failure_keyword", "log_tail"],
+      "reasons": ["new_failure_state", "failed_test", "failure_keyword:failed", "log_tail"],
+      "line_weight": 5,
+      "selected_for_expansion": true
+    },
+    {
+      "occurrence_id": "occ-f-16",
+      "selected_by": ["logdiff", "failure_keyword", "log_tail"],
+      "reasons": ["new_terminal_failure", "nonzero_exit", "failure_keyword:exit", "log_tail", "nonzero_terminal_exit"],
+      "line_weight": 10,
+      "selected_for_expansion": true
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+LATTICE_PIPELINE format=v3 pipeline_id=payments-dag
+2026-08-25T09:00:01Z [node=compile attempt=1 seq=1] Compiling payment-api build=8821
+2026-08-25T09:00:02Z [node=test:integration attempt=2 seq=1] request=550e8400-e29b-41d4-a716-446655440000 started
+2026-08-25T09:00:03Z [node=security-scan attempt=1 seq=1] Scanning 245 dependencies
+2026-08-25T09:00:04Z [node=test:integration attempt=2 seq=2] Authorization: Bearer sample-token-not-real
+2026-08-25T09:00:05Z [node=package attempt=1 seq=1] Waiting for compile output
+2026-08-25T09:00:06Z [node=test:integration attempt=2 seq=3] Connected to 10.5.7.9 in 94ms
+2026-08-25T09:00:07Z [node=security-scan attempt=1 seq=2] No critical findings
+2026-08-25T09:00:08Z [node=test:integration attempt=2 seq=4] PaymentServiceTest passed=124 failed=0 duration=13.1s
+2026-08-25T09:00:09Z [node=package attempt=1 seq=2] Created /tmp/build-8821/payment-api-b91fc2.jar
+2026-08-25T09:00:10Z [node=test:integration attempt=2 seq=5] Worker exited code=0

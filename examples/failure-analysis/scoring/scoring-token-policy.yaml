@@ -1,0 +1,130 @@
+# Recommended starting policy. The final production contract is not implemented yet.
+schema_version: "scoring-token-policy/v1"
+policy_id: "logsift-scoring-token-v1"
+policy_version: "1.0.0"
+
+scoring:
+  # Every factor is normalized to the range 0.0 to 1.0.
+  formula: "100 * clamp(weighted_positive_sum - weighted_penalty_sum, 0, 1)"
+  weights:
+    novelty: 0.22
+    severity: 0.22
+    frequency_shift: 0.12
+    failure_proximity: 0.12
+    scope_relevance: 0.10
+    structured_diagnostic: 0.08
+    failing_entity_correlation: 0.08
+    source_confidence: 0.06
+  penalties:
+    excessive_repetition: 0.10
+    duplicate_overlap: 0.10
+
+  diagnostic_density:
+    # Density is calculated before evidence text is compacted. A line selected by
+    # several detectors is counted once using its final candidate line weight.
+    formula: "candidate_line_weight_sum / expanded_line_count"
+    normal_expansion_order: "logical"
+    fallback_expansion_order: "physical"
+    basis: "representative_expanded_block_before_compaction"
+    candidate_line_weight_range: [0, 10]
+    use_as_final_score_factor: false
+    use_as_secondary_ranking_signal: true
+    prefer_higher_density_when_score_difference_at_most: 5.0
+    keep_inputs_in_score_record: true
+  rule_adjustments:
+    - rule_id: "boost-first-correlated-timeout"
+      when_signal: "first_correlated_timeout"
+      score_boost: 5.0
+      maximum_score: 100.0
+    - rule_id: "require-terminal-nonzero-exit"
+      when_signal: "nonzero_terminal_exit"
+      require_inclusion: true
+  tie_breakers:
+    - "required_first"
+    - "higher_diagnostic_density"
+    - "higher_source_confidence"
+    - "closer_to_first_failure"
+    - "earlier_physical_line"
+    - "block_id"
+  storage:
+    # Keep the evidence block immutable. Store scoring as a separate versioned record.
+    key_fields: ["analysis_id", "block_id", "policy_version"]
+    keep_factor_values: true
+    keep_weighted_terms: true
+    keep_rule_adjustments: true
+    keep_explanation: true
+
+token_budget:
+  tokenizer: "target_model_tokenizer"
+  count_block_headers: true
+  count_provenance: true
+  count_truncation_notices: true
+
+  production_default:
+    total_context_tokens: 32000
+    reservations:
+      instructions: 3000
+      failure_metadata_and_diff: 2000
+      retrieved_knowledge_and_code: 6000
+      model_response: 5000
+      safety_margin: 2000
+    calculated_log_evidence_budget: 14000
+
+  # This deliberately small profile makes the worked selection easy to see.
+  worked_example:
+    total_context_tokens: 4000
+    reservations:
+      instructions: 800
+      failure_metadata_and_diff: 500
+      retrieved_knowledge_and_code: 800
+      model_response: 1200
+      safety_margin: 280
+    calculated_log_evidence_budget: 420
+
+selection:
+  # Scores rank value. Tokens are not assigned as score percentages.
+  allocate_tokens_proportional_to_score: false
+  representation_order: ["full", "compact", "summary", "omit"]
+  required_signals:
+    - "primary_exception"
+    - "nonzero_terminal_exit"
+    - "failed_test_summary"
+  diversity:
+    minimum_failed_scope_blocks: 2
+    include_upstream_scope_when_signaled: true
+    maximum_fraction_from_one_category: 0.60
+    maximum_near_duplicates: 1
+  ranking:
+    use_score: true
+    use_diagnostic_density_as_secondary_signal: true
+    use_value_per_token_as_secondary_signal: true
+  final_output_order: "causal_then_chronological"
+
+safe_compaction:
+  # These operations change only the derived LLM evidence, never the raw log.
+  order:
+    - "collapse_exact_duplicates"
+    - "compress_retry_loops"
+    - "remove_repeated_source_envelopes"
+    - "keep_first_last_and_most_anomalous_examples"
+    - "split_at_safe_structure_boundary"
+    - "use_summary_with_full_log_pointer"
+  preserve_whole_when_possible:
+    - "exception_chain"
+    - "stack_trace"
+    - "failed_test_diagnostic"
+    - "compiler_error"
+  never:
+    - "cut_in_the_middle_of_a_utf8_character"
+    - "cut_in_the_middle_of_a_log_line"
+    - "remove_provenance"
+    - "modify_the_restricted_raw_log"
+  require_truncation_notice: true
+
+validation:
+  require_positive_weights_sum: 1.0
+  require_factor_range: [0.0, 1.0]
+  require_candidate_line_weight_range: [0, 10]
+  require_positive_expanded_line_count: true
+  require_reservations_plus_evidence_equals_total: true
+  require_target_tokenizer_before_final_assembly: true
