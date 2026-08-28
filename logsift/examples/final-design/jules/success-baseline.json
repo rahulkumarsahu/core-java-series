@@ -1,0 +1,81 @@
+{
+  "schema_version": "baseline-example/v1",
+  "baseline_key": {
+    "seal_id": "seal101",
+    "project_id": "payments",
+    "repo_id": "payment-api",
+    "source_type": "JULES"
+  },
+  "baseline_version": "baseline-17",
+  "branch_class": "main",
+  "pipeline_id": "payments-ci",
+  "compatibility": {
+    "source_schema": "jules/v2",
+    "normalization_rules": "1.0.0",
+    "redaction_rules": "1.0.0",
+    "masking_rules": "1.0.0",
+    "segmentation": "segment/v1",
+    "parser": "drain/v1",
+    "fingerprint": "fingerprint/v1",
+    "safe_parameters": "safe-parameters/v1"
+  },
+  "templates": [
+    {
+      "fingerprint": "sha256:v1:835e0cb34d824a946a131657c5eb55f046f28d407dc5da09dd0e3057dbf7f64c",
+      "canonical_template": "INFO Build started",
+      "scope": "build",
+      "count_per_run": {"median": 1, "min": 1, "max": 1}
+    },
+    {
+      "fingerprint": "sha256:v1:687d2e1a273b529d6ed0784f9b804c70682e851b6e9394372525e0a62f80c55d",
+      "canonical_template": "INFO Compiled <COUNT> files",
+      "scope": "build",
+      "count_per_run": {"median": 1, "min": 1, "max": 1}
+    },
+    {
+      "fingerprint": "sha256:v1:f3b5d7436fa137f4b505e3354f5dcff80e3812031dfe381cc7dfa0417f39f2c8",
+      "canonical_template": "INFO PaymentServiceTest started request=<REQUEST_ID>",
+      "scope": "test",
+      "count_per_run": {"median": 1, "min": 1, "max": 1}
+    },
+    {
+      "fingerprint": "sha256:v1:5668aa5aa3a55bd43e9f00d4c5f4b7618dd2fadbba31232d33e0919a85be2347",
+      "canonical_template": "INFO Authorization: <REDACTED_TOKEN>",
+      "scope": "test",
+      "count_per_run": {"median": 1, "min": 1, "max": 1}
+    },
+    {
+      "fingerprint": "sha256:v1:75726801022a99d10773558483ecb28e9b50c555e855c04eb154d74105469d0c",
+      "canonical_template": "INFO payment-api returned status=<STATUS_CODE> duration=<DURATION>",
+      "scope": "test",
+      "count_per_run": {"median": 1, "min": 1, "max": 1},
+      "safe_parameters": {
+        "status_code": {"type": "ENUM", "counts": {"200": 20}},
+        "duration_ms": {"type": "NUM", "median": 112, "p95": 180}
+      }
+    },
+    {
+      "fingerprint": "sha256:v1:d6686e948b423aaadc53a6befe948930b49925812e9b61b17317defa1dfc6a98",
+      "canonical_template": "INFO PaymentServiceTest passed=<COUNT> failed=0 duration=<DURATION>",
+      "scope": "test",
+      "count_per_run": {"median": 1, "min": 1, "max": 1}
+    },
+    {
+      "fingerprint": "sha256:v1:4e16684e145b0f195baff59c6e3942ab999ecbe6382a8ad83818e3ad007452f7",
+      "canonical_template": "INFO Created <TEMP_PATH>/payment-api-<ARTIFACT_HASH>.jar",
+      "scope": "package",
+      "count_per_run": {"median": 1, "min": 1, "max": 1}
+    },
+    {
+      "fingerprint": "sha256:v1:c14b70f253cd24352f3e82770b6d47e8651909b9bab65e6b814ff46908644346",
+      "canonical_template": "INFO Pipeline completed exit_code=0",
+      "scope": "package",
+      "count_per_run": {"median": 1, "min": 1, "max": 1}
+    }
+  ],
+  "segment_sequences": {
+    "build": ["835e0cb3", "687d2e1a"],
+    "test": ["f3b5d743", "5668aa5a", "75726801", "d6686e94"],
+    "package": ["4e16684e", "c14b70f2"]
+  }
+}

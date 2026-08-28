@@ -1,0 +1,56 @@
+{
+  "schema_version": "evidence-pack/v1",
+  "analysis_id": "analysis-9001",
+  "run": {
+    "seal_id": "seal101",
+    "project_id": "payments",
+    "repo_id": "payment-api",
+    "source_type": "JULES",
+    "pipeline_id": "payments-ci",
+    "run_id": "run-601",
+    "branch": "main",
+    "commit_sha": "8c21de4"
+  },
+  "baseline": {"version": "baseline-17", "compatible": true},
+  "failure_summary": "PaymentServiceTest failed after payment-api returned 503; the run ended with exit code 1.",
+  "logdiff_reasons": ["new retry and assertion templates", "status parameter changed from 200 to 503", "normal package stage missing", "nonzero test count and exit code"],
+  "selected_blocks": [
+    {
+      "block_id": "block-test-cause",
+      "error_classification": {
+        "category": "test.assertion",
+        "secondary_labels": ["dependency.http_5xx"],
+        "confidence_score": 0.96,
+        "priority": "P1",
+        "priority_reasons": ["primary failed Test-stage block", "nonzero test count", "complete assertion stack"],
+        "classifier_version": "error-classifier/v1",
+        "priority_policy_version": "error-priority/v1"
+      },
+      "representation": "full",
+      "evidence_score": 95,
+      "scoring_policy_version": "evidence-score/v1",
+      "tokens": 176
+    },
+    {
+      "block_id": "block-terminal-exit",
+      "error_classification": {
+        "category": "pipeline.nonzero_exit",
+        "secondary_labels": ["terminal.consequence"],
+        "confidence_score": 0.99,
+        "priority": "P2",
+        "priority_reasons": ["required terminal evidence", "likely consequence rather than first cause"],
+        "classifier_version": "error-classifier/v1",
+        "priority_policy_version": "error-priority/v1"
+      },
+      "representation": "full",
+      "evidence_score": 70,
+      "scoring_policy_version": "evidence-score/v1",
+      "tokens": 18
+    }
+  ],
+  "token_budget": {"available_log_evidence": 14000, "selected_log_evidence": 194, "truncated": false},
+  "provenance": [
+    {"block_id": "block-test-cause", "raw_log_object_id": "failed.log", "object_version": "v1", "line_start": 3, "line_end": 10, "byte_start": 103, "byte_end": 783},
+    {"block_id": "block-terminal-exit", "raw_log_object_id": "failed.log", "object_version": "v1", "line_start": 11, "line_end": 11, "byte_start": 783, "byte_end": 849}
+  ]
+}

@@ -1,0 +1,11 @@
+[jules stage=build attempt=1] INFO Build started
+[jules stage=build attempt=1] INFO Compiled 454 files
+[jules stage=test attempt=1] INFO PaymentServiceTest started request=7b71d095-3e40-4f15-916c-2e447842be31
+[jules stage=test attempt=1] INFO Authorization: Bearer another-sample-token
+[jules stage=test attempt=1] WARN payment-api retry attempt=1
+[jules stage=test attempt=1] INFO payment-api returned status=503 duration=3000ms
+[jules stage=test attempt=1] ERROR AssertionError expected_status=200 actual_status=503
+[jules stage=test attempt=1] ERROR at PaymentClient.fetch(PaymentClient.java:84)
+[jules stage=test attempt=1] ERROR at PaymentServiceTest.checkout(PaymentServiceTest.java:217)
+[jules stage=test attempt=1] ERROR PaymentServiceTest passed=123 failed=1 duration=15.1s
+[jules stage=test attempt=1] ERROR Pipeline completed exit_code=1

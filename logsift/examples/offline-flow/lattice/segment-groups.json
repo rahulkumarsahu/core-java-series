@@ -1,0 +1,47 @@
+{
+  "schema_version": "segment-groups/v1",
+  "run_id": "run-8821",
+  "log_object_id": "log-run-8821",
+  "source_type": "LATTICE",
+  "line_number_base": 1,
+  "byte_offset_base": 0,
+  "byte_range": "half_open",
+  "segments": [
+    {
+      "segment_id": "seg-run-8821-compile-1",
+      "scope": {"kind": "dag_node", "name": "compile", "attempt": 1},
+      "logical_line_count": 1,
+      "physical_ranges": [{"line_start": 2, "line_end": 2, "byte_start": 52, "byte_end": 137}]
+    },
+    {
+      "segment_id": "seg-run-8821-integration-2",
+      "scope": {"kind": "dag_node", "name": "test:integration", "attempt": 2},
+      "logical_line_count": 5,
+      "physical_ranges": [
+        {"line_start": 3, "line_end": 3, "byte_start": 137, "byte_end": 251, "logical_sequence": 1},
+        {"line_start": 5, "line_end": 5, "byte_start": 335, "byte_end": 440, "logical_sequence": 2},
+        {"line_start": 7, "line_end": 7, "byte_start": 519, "byte_end": 610, "logical_sequence": 3},
+        {"line_start": 9, "line_end": 9, "byte_start": 689, "byte_end": 804, "logical_sequence": 4},
+        {"line_start": 11, "line_end": 11, "byte_start": 903, "byte_end": 985, "logical_sequence": 5}
+      ]
+    },
+    {
+      "segment_id": "seg-run-8821-security-scan-1",
+      "scope": {"kind": "dag_node", "name": "security-scan", "attempt": 1},
+      "logical_line_count": 2,
+      "physical_ranges": [
+        {"line_start": 4, "line_end": 4, "byte_start": 251, "byte_end": 335, "logical_sequence": 1},
+        {"line_start": 8, "line_end": 8, "byte_start": 610, "byte_end": 689, "logical_sequence": 2}
+      ]
+    },
+    {
+      "segment_id": "seg-run-8821-package-1",
+      "scope": {"kind": "dag_node", "name": "package", "attempt": 1},
+      "logical_line_count": 2,
+      "physical_ranges": [
+        {"line_start": 6, "line_end": 6, "byte_start": 440, "byte_end": 519, "logical_sequence": 1},
+        {"line_start": 10, "line_end": 10, "byte_start": 804, "byte_end": 903, "logical_sequence": 2}
+      ]
+    }
+  ]
+}

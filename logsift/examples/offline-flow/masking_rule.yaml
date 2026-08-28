@@ -1,0 +1,70 @@
+# Mask changing, non-secret values only after redaction.
+schema_version: "masking-rules/v1"
+rule_version: "1.0.0"
+
+execution:
+  deterministic: true
+  order: "priority_then_rule_id"
+  preserve_typed_placeholders: true
+
+rules:
+  - rule_id: "mask-uuid-v1"
+    priority: 100
+    enabled: true
+    match: '\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b'
+    replacement: "<REQUEST_ID>"
+    keep_protected_digest: true
+
+  - rule_id: "mask-build-id-v1"
+    priority: 110
+    enabled: true
+    match: '(?i)(?<prefix>\bbuild[= ]+)\d+\b'
+    replacement: "${prefix}<BUILD_ID>"
+
+  - rule_id: "mask-ip-v1"
+    priority: 120
+    enabled: true
+    match: '\b(?:\d{1,3}\.){3}\d{1,3}\b'
+    replacement: "<IP_ADDRESS>"
+
+  - rule_id: "mask-duration-v1"
+    priority: 130
+    enabled: true
+    match: '\b\d+(?:\.\d+)?(?:ms|s|min|h)\b'
+    replacement: "<DURATION>"
+    emit_numeric_feature: "duration_ms"
+
+  - rule_id: "mask-artifact-hash-v1"
+    priority: 140
+    enabled: true
+    match: '(?<=payment-api-)[0-9a-f]{6,40}(?=\.jar)'
+    replacement: "<ARTIFACT_HASH>"
+
+  - rule_id: "mask-safe-count-v1"
+    priority: 150
+    enabled: true
+    match: '(?i)(?<prefix>\b(?:compiled|passed|scanning)=?\s*)\d+\b'
+    replacement: "${prefix}<COUNT>"
+    emit_numeric_feature: "count"
+
+  - rule_id: "mask-temporary-path-v1"
+    priority: 160
+    enabled: true
+    match: '/tmp/build-\d+'
+    replacement: "<TEMP_PATH>"
+
+preserve:
+  - pattern: '(?i)\bexit code=\d+\b'
+    reason: "Exit code changes diagnostic meaning."
+  - pattern: '\bfailed=0\b'
+    reason: "Success and nonzero failure states must remain distinct."
+  - pattern: '\b[A-Za-z0-9_]+(?:Test|Exception|Error)\b'
+    reason: "Test and error names help diagnosis."
+
+validation:
+  require_unique_rule_ids: true
+  reject_empty_patterns: true
+  tests:
+    - name: "mask build, IP, and duration"
+      input: "Build 7312 connected to 10.4.8.2 in 812ms"
+      expected: "Build <BUILD_ID> connected to <IP_ADDRESS> in <DURATION>"

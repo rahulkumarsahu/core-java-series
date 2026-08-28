@@ -1,0 +1,28 @@
+{
+  "schema_version": "drain-state-wrapper/v1",
+  "parser": "Drain",
+  "parser_version": "drain/v1",
+  "frozen": true,
+  "model_scope": {
+    "seal_id": "seal101",
+    "project_id": "payments",
+    "repo_id": "payment-api",
+    "source_type": "JULES"
+  },
+  "config": {
+    "tree_depth": 4,
+    "similarity_threshold": 0.5,
+    "max_children": 100
+  },
+  "clusters": [
+    {"local_cluster_id":1,"fingerprint":"sha256:v1:7e70828952dc0b502c8f7ac7bf1cbe10472a555f5195b86cc2dcb61ebdedcc45"},
+    {"local_cluster_id":2,"fingerprint":"sha256:v1:10057ef387a2358fd2af22bebc333480a6ed5ddfcf3feaaa58e1fea044a0a854"},
+    {"local_cluster_id":3,"fingerprint":"sha256:v1:07ac57de1501d210cae86ba9e725356330e80d4847d8c65f9ca757dedc71207d"},
+    {"local_cluster_id":4,"fingerprint":"sha256:v1:19dda2a9163a1faceaad68d372ac8ec92eef4c7adb2461852e0ec099e0dddc34"},
+    {"local_cluster_id":5,"fingerprint":"sha256:v1:a6bf4ab8e9bc8a608a9a530538107eda2b7c27ee621181a4bc6cb607a50c6f63"},
+    {"local_cluster_id":6,"fingerprint":"sha256:v1:c670eb20ba7cbec4014f6b6b1751c68641ddab4a5c070cbb11d241eefe9f6160"},
+    {"local_cluster_id":7,"fingerprint":"sha256:v1:3156a32efa795df7b241dd3e75dc5784409ef33e71c22268f63c61f8c781bf14"},
+    {"local_cluster_id":8,"fingerprint":"sha256:v1:14e3e771c9e17ab4904dfc95ea64fc67ccd4f5f8e6e1acaad0ba25768ee0a426"}
+  ],
+  "note": "This is a simplified wrapper. Numeric cluster IDs are local and are never compared across parser instances."
+}

@@ -1,0 +1,8 @@
+[jules stage=build attempt=1] INFO Build started
+[jules stage=build attempt=1] INFO Compiled 452 files
+[jules stage=test attempt=1] INFO PaymentServiceTest started request=550e8400-e29b-41d4-a716-446655440000
+[jules stage=test attempt=1] INFO Authorization: Bearer sample-token-not-real
+[jules stage=test attempt=1] INFO payment-api returned status=200 duration=110ms
+[jules stage=test attempt=1] INFO PaymentServiceTest passed=124 failed=0 duration=12.8s
+[jules stage=package attempt=1] INFO Created /tmp/build-100/payment-api-a81fd9.jar
+[jules stage=package attempt=1] INFO Pipeline completed exit_code=0
