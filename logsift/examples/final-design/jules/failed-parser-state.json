@@ -1,0 +1,20 @@
+{
+  "schema_version": "failed-parser-state/v1",
+  "analysis_id": "analysis-9001",
+  "run_id": "run-601",
+  "started_from": "baseline-17/state-v1",
+  "catalog_version": "run-601-catalog/v1",
+  "finalized_after_pass1": true,
+  "read_only": true,
+  "clusters": [
+    {"cluster_id": "c001", "template": "INFO Build started", "fingerprint": "sha256:v1:835e0cb34d824a946a131657c5eb55f046f28d407dc5da09dd0e3057dbf7f64c"},
+    {"cluster_id": "c002", "template": "INFO Compiled <COUNT> files", "fingerprint": "sha256:v1:687d2e1a273b529d6ed0784f9b804c70682e851b6e9394372525e0a62f80c55d"},
+    {"cluster_id": "c003", "template": "INFO PaymentServiceTest started request=<REQUEST_ID>", "fingerprint": "sha256:v1:f3b5d7436fa137f4b505e3354f5dcff80e3812031dfe381cc7dfa0417f39f2c8"},
+    {"cluster_id": "c004", "template": "INFO Authorization: <REDACTED_TOKEN>", "fingerprint": "sha256:v1:5668aa5aa3a55bd43e9f00d4c5f4b7618dd2fadbba31232d33e0919a85be2347"},
+    {"cluster_id": "c005", "template": "WARN payment-api retry attempt=<ATTEMPT>", "fingerprint": "sha256:v1:64fc8bebdbd5327f15fd880fee87d70194918652e2689652336818dcc03a54d1"},
+    {"cluster_id": "c006", "template": "INFO payment-api returned status=<STATUS_CODE> duration=<DURATION>", "fingerprint": "sha256:v1:75726801022a99d10773558483ecb28e9b50c555e855c04eb154d74105469d0c"},
+    {"cluster_id": "c007", "template": "ERROR AssertionError expected_status=<STATUS_CODE> actual_status=<STATUS_CODE>", "fingerprint": "sha256:v1:8d1ebe8e398e74ff1b424d4e0bc1b20d703dc23bb755f912ca5499130d3cd485"},
+    {"cluster_id": "c008", "template": "ERROR PaymentServiceTest passed=<COUNT> failed=<COUNT> duration=<DURATION>", "fingerprint": "sha256:v1:3ddae8b0c33bcda35953b737052acd84e988f5984960182d380c11e69ab44a85"},
+    {"cluster_id": "c009", "template": "ERROR Pipeline completed exit_code=<EXIT_CODE>", "fingerprint": "sha256:v1:35199be24f3db098b0f98ab6d505b0fc783cd4aad2a38dd802a6867747ce055c"}
+  ]
+}

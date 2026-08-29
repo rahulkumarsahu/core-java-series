@@ -1,6 +1,6 @@
 # Logsift final-design examples
 
-This folder is the example set for the design described in `LogSift.md`. It uses the selected two-pass failed-log flow. It does not require a permanent line-by-line index.
+This folder is the example set for the design described in `LogSift.md`. It uses the normal frozen-replay strategy. Direct keyword and terminal candidates expand during Pass 1; LogDiff-only candidates are found by read-only replay. It does not require a permanent line-by-line index.
 
 All names, credentials, identifiers, logs, measurements, and hashes are synthetic test data.
 
@@ -13,7 +13,9 @@ The failed run then uses these files in order:
 | File | Purpose |
 |---|---|
 | [failed.log](jules/failed.log) | Immutable source log for the failed run |
-| [failed-template-summary.json](jules/failed-template-summary.json) | Pass 1 counts, safe parameters, segment-local order, multiline relationships, and terminal state |
+| [analysis-manifest.json](jules/analysis-manifest.json) | Pinned raw-log version, processing versions, baseline, limits, and occurrence strategy |
+| [failed-template-summary.json](jules/failed-template-summary.json) | Pass 1 final cluster-to-fingerprint state, counts, safe parameters, segment-local order, multiline relationships, and terminal state |
+| [failed-parser-state.json](jules/failed-parser-state.json) | Final read-only run-local cluster, canonical-template, and fingerprint catalog used by replay |
 | [logdiff-result.json](jules/logdiff-result.json) | Compatible baseline comparison and the selector set for Pass 2 |
 | [candidate-occurrences.jsonl](jules/candidate-occurrences.jsonl) | Exact pointers for selected failed-log occurrences only |
 | [expanded-fragments.jsonl](jules/expanded-fragments.jsonl) | Before-and-after context collected by the Test-stage ring buffer |
@@ -60,7 +62,7 @@ status_code=503, duration_ms=3000
 
 The template fingerprint matches the success baseline, but the safe values do not. LogDiff therefore creates a `parameter_shift` selector. Pass 2 finds the exact failed occurrence at physical line 6 and bytes 348 to 430.
 
-The retry, status shift, assertion, failed-test summary, and nonzero exit create five candidate occurrences. Their windows overlap inside the same Test segment, so expansion produces one fragment rather than five copied regions. Block construction then separates the likely cause from the required terminal consequence. The first block is classified as `test.assertion` with confidence `0.96`, priority `P1`, and evidence score `95`. The terminal consequence is classified as `pipeline.nonzero_exit` with confidence `0.99`, priority `P2`, and evidence score `70`.
+The retry, assertion, failed-test summary, and nonzero exit are direct candidates expanded during Pass 1. The status parameter shift becomes a selector only after LogDiff and is found by frozen read-only replay. Their windows overlap inside the same Test segment, so expansion produces one fragment rather than five copied regions. Block construction then separates the likely cause from the required terminal consequence. The provisional three-factor score gives the first block `94` and the terminal block `77`.
 
 ## Lattice example
 
@@ -73,12 +75,14 @@ This is the key reason Logsift keeps one ring buffer per Lattice node attempt. A
 ## What the example proves
 
 - Successful learning stores repository-level templates and scope statistics, not one record per successful log line.
-- Pass 1 can identify summary-level changes without keeping the failed log in memory.
+- One manifest pins the exact processing contract before Pass 1.
+- Pass 1 uses run-local cluster IDs and fingerprints only the final frozen templates.
+- Pass 1 can identify and expand direct candidates without keeping the failed log in memory.
 - LogDiff uses stable fingerprints, scope, sequence, severity, and safe parameter statistics.
-- Pass 2 stores pointers only for selected occurrences.
+- Frozen read-only replay finds candidates that become known only after LogDiff.
 - Per-segment ring buffers provide bounded context for sequential and interleaved sources.
 - Expanded content retains exact lines and byte ranges.
 - Deduplication and block construction keep provenance.
 - Every block carries error classification, confidence, priority, and separate evidence-ranking score.
 - Scoring and token selection produce a small model input containing those fields and their explanations.
-- No full line-level sidecar is needed for the default flow.
+- No permanent full line-level sidecar is needed for the default flow; the temporary thin-index strategy is reserved for measured large-log or repeated-analysis cases.

@@ -92,16 +92,21 @@ This stage runs after a pipeline fails. Its purpose is to find what changed, rec
 
 ![Logsift failure-analysis overview](images/3_failure_analysis.png)
 
+The overview image shows the normal replay path at a high level. The detailed design below adds three important controls that are intentionally not crowded into the picture: direct candidate expansion during Pass 1, fingerprint finalization after Pass 1, and the optional thin-index path. In the picture, “Drain fingerprints” should be read as run-local clusters that receive their final fingerprints only after the parser is frozen.
+
 | Block | Purpose |
 |---|---|
 | Failed terminal run | Provides the complete failed log and required run metadata. |
-| Pass 1: failed-run summary | Streams the complete failed log with compatible normalization, redaction, masking, segmentation, and frozen Drain versions. It produces counts, order, safe parameter statistics, keyword-hit pointers, and terminal-state information. |
+| Pass 1: failed-run summary | Pins one processing configuration, streams the failed log, and uses a private run-local copy of the compatible Drain state. It produces run-local template counts, order, safe parameter statistics, keyword-hit pointers, and terminal-state information. |
+| Immediate candidate expansion | Expands obvious keyword, severity, stack, and terminal candidates while Pass 1 is already streaming. This avoids finding the same content again later. |
+| Finalize failed templates | Freezes the run-local Drain parser after Pass 1, converts each final canonical template into a stable fingerprint, and records the mapping from run-local cluster ID to fingerprint. Intermediate fingerprints are never used for LogDiff. |
 | LogDiff | Compares stable fingerprints, counts, scope, order, severity, and safe parameter distributions with a compatible success baseline. Its output is a small selector set. |
-| Pass 2: occurrence discovery | Streams the failed log again. A hash-set lookup finds selected fingerprints, while exact keyword and terminal pointers are joined as additional reasons. |
+| Pass 2: occurrence discovery | Uses one of two strategies for candidates known only after LogDiff: frozen read-only replay for normal logs, or a temporary compressed thin index for very large or repeatedly analysed logs. |
 | Candidate pool | Stores small suspicious-occurrence references under a unique `analysis_id`. It does not copy the complete log. |
-| Per-segment ring buffers | Keep only a small number of recent events for each Jules stage attempt or Lattice node attempt. They provide before-context without loading a segment or complete log into memory. |
-| Inline content expansion | When a candidate appears during Pass 2, Logsift takes the buffered before-context and collects bounded after-context from the same logical segment. |
-| Candidate-only pointers | Persist exact physical lines, logical positions, byte ranges, segment identity, and reasons only for selected occurrences. A complete line-level sidecar is not created by default. |
+| Per-segment ring buffers | Keep only a small number of recent events for each Jules stage attempt or Lattice node attempt during streaming. They provide before-context without loading a segment or complete log into memory. |
+| Inline content expansion | When a candidate appears in Pass 1 or replay, Logsift takes buffered before-context and collects bounded after-context from the same logical segment. |
+| Candidate-only pointers | Persist exact physical lines, logical positions, byte ranges, segment identity, and reasons only for selected occurrences. A permanent complete line-level sidecar is not created by default. |
+| Optional thin index | For measured large-log or repeated-analysis cases, stores compact run-local cluster IDs, segment positions, line and byte pointers, and safe flags in temporary compressed binary form. |
 | Evidence blocks | Combine related expanded lines into small readable failure stories while keeping exact provenance. |
 | Deduplicate | Collapses repeated blocks while retaining occurrence counts and representative locations. |
 | Error classification | Adds a category, confidence score, `P0` to `P4` priority, priority reasons, classifier version, and review flag to every retained block. |
@@ -498,11 +503,11 @@ source_type + pipeline_id + stage_or_node + attempt_class
 
 The cache is an optimization only. A cache hit and a normal Drain lookup must return the same canonical template and fingerprint. Cache size, hit rate, parser latency, and memory must be measured before enabling it in production. Changing the cache must not change the baseline contract.
 
-##### Why the full sidecar is not part of the default design
+##### Why a permanent full sidecar is not part of the default design
 
 A complete sidecar would add a stored record for every log event. For a five-million-line log, that creates millions of records even when only a few lines become evidence.
 
-Logsift instead makes this trade-off:
+For normal one-time analysis, Logsift makes this trade-off:
 
 ```text
 one additional sequential failed-log pass
@@ -510,9 +515,9 @@ in exchange for
 no mandatory full line-level index
 ```
 
-The second pass is explained in [Failure analysis](#32-failure-analysis-flow). It discovers exact occurrences and expands them while streaming. This keeps storage small and makes memory predictable.
+The second pass is explained in [Failure analysis](#32-failure-analysis-flow). It uses the finalized run-local catalog in read-only mode, discovers only the remaining selected occurrences, and expands them while streaming. This keeps storage small and makes memory predictable.
 
-If the same failed log is repeatedly queried, Logsift may later build an optional compressed occurrence index. That is an acceleration feature, not a required artifact and not part of the first implementation.
+For very large or repeatedly queried failed logs, Logsift may instead build the optional temporary compressed thin index described in the failure flow. That is an acceleration strategy, not a successful-baseline artifact and not a permanent requirement.
 
 #### 3.1.7 Drain templates and fingerprints
 
@@ -576,11 +581,13 @@ Main/test statistics:     usually 0 occurrences
 Release/build statistics: usually 2 occurrences
 ```
 
-The failed run uses the same saved rules and Drain settings as the baseline. It may find known templates or create temporary failed-run templates, but it never changes the successful baseline or its Drain state.
+The failed run uses the pinned compatible rules and starts from a private copy of the saved Drain state. It may find known templates or create temporary failed-run templates in that private copy, but it never changes the successful baseline or its Drain state. Final failed-run fingerprints are created only after the private parser is frozen.
 
 #### 3.1.8 Files produced and their purpose
 
 A published baseline version has three main files: `baseline.json`, `templates.json`, and `state.json`. A small `current.json` file points to the latest complete version.
+
+The [examples index](examples/README.md) lists the two example sets that belong to this design. The example directory intentionally excludes retired exploratory inputs so engineers do not implement an older storage flow by mistake.
 
 | File | Stored where | What it contains | Used later by |
 |---|---|---|---|
@@ -590,7 +597,10 @@ A published baseline version has three main files: `baseline.json`, `templates.j
 | `current.json` | Baseline key folder | Points to the newest complete baseline version | Baseline lookup |
 | `segment-groups.json` | Run folder | Describes stage or node attempts, logical counts, completion state, and summarized physical ranges; it is not a per-line index | Validates successful grouping and records the segments seen in a failed run |
 | `raw-log-manifest.json` | Failed-run folder | Describes immutable raw-log chunks, compression, line-range checkpoints, checksums, and object versions | Supports restart, bounded reads, and provenance without indexing every line |
-| `failed-template-summary.json` | Failed-run folder | Stores failed fingerprints, scope counts, sequence information, severity, and safe parameter statistics from Pass 1 | LogDiff |
+| `analysis-manifest.json` | Analysis folder | Pins the raw-log version, processing configuration, compatible baseline, occurrence-discovery strategy, limits, and status for one `analysis_id` | Keeps every worker and retry on the same contract |
+| `failed-template-summary.json` | Failed-run folder | Stores the finalized run-local cluster-to-fingerprint mapping, failed fingerprints, scope counts, sequence information, severity, and safe parameter statistics from Pass 1 | LogDiff and Pass 2 consistency checks |
+| `failed-parser-state.json` | Failed-run temporary folder | Stores the finalized read-only run-local Drain catalog and its compatible baseline-state reference | Normal-log Pass 2 replay; deleted according to failed-analysis retention |
+| Temporary thin index | Failed-run temporary folder | Optionally stores compressed run-local cluster IDs, segment/logical positions, physical lines, chunk and byte pointers, and safe flags | Large-log or repeated-analysis candidate lookup and content expansion |
 | `logdiff-result.json` | Analysis folder | Stores compatibility decisions, candidate selectors, missing-template notices, and measurable comparison reasons | Pass 2 candidate discovery and final evidence pack |
 | `candidate-occurrences.jsonl` | Analysis folder | Stores exact pointers only for selected failed-log occurrences | Content expansion, audit, and evidence provenance |
 | Restricted raw log | Protected source-log storage | Stores the original uploaded log text when retention policy allows it | Supplies failed-log ranges selected for expansion; a successful raw log is not required by LogDiff |
@@ -613,10 +623,13 @@ runs/
     ├── event.json
     ├── segment-groups.json
     ├── raw-log-manifest.json
-    └── failed-template-summary.json
+    ├── failed-template-summary.json
+    ├── failed-parser-state.json
+    └── optional-thin-index.bin
 
 analyses/
 └── {seal_id}/{project_id}/{repo_id}/{source_type}/{run_id}/{analysis_id}/
+    ├── analysis-manifest.json
     ├── logdiff-result.json
     ├── candidate-occurrences.jsonl
     ├── expanded-fragments.jsonl
@@ -722,14 +735,14 @@ After offline learning publishes a baseline, Logsift must keep:
 
 Logsift may also keep the successful run's `segment-groups.json` and protected raw-log reference for a short time when audit, validation, or replay needs them. They are not required for normal LogDiff or for expanding a different failed run.
 
-When a future run fails, Pass 1 creates its template summary using the same processing rules. LogDiff compares that summary with `templates.json`. Pass 2 then streams the failed log again, finds the selected occurrences, and expands their context inside the correct segment. It stores exact pointers only for candidates and evidence fragments.
+When a future run fails, Pass 1 uses pinned processing rules and a private run-local Drain copy. It expands direct candidates, freezes the final run-local templates, and creates their stable fingerprints. LogDiff compares that final summary with `templates.json`. Remaining selectors use either frozen read-only replay or the temporary thin index. Both strategies store exact pointers only for candidates and evidence fragments.
 
 In short:
 
 ```text
 baseline templates = what is normally expected
 LogDiff selectors   = what failed-run signals to find
-Pass 2 buffers      = which nearby logical events belong together
+segment context     = ring buffers or thin-index logical neighbours
 candidate pointers  = exact locations kept for selected evidence
 failed raw log      = the immutable source text
 ```
@@ -739,20 +752,25 @@ failed raw log      = the immutable source text
 
 Failure analysis starts only after the pipeline has reached a final failed state and the raw log is complete. It uses the successful baseline, but it never changes that baseline.
 
-The final design uses two bounded streaming passes over the failed log:
+The selected design is adaptive. Pass 1 always streams the complete failed log and builds its summary. Obvious keyword, severity, stack, and terminal candidates can be expanded during that pass. After LogDiff, candidates that were not known earlier are located by either a read-only streaming replay or a temporary thin index:
 
 ```text
-Pass 1: build the failed-run summary
+Pin one processing configuration
+  -> Pass 1 builds the failed-run summary
+  -> expand candidates already known while streaming
+  -> freeze the run-local Drain parser and finalize fingerprints
   -> LogDiff decides what is suspicious
-Pass 2: find exact occurrences and expand them while streaming
+  -> normal log: read-only Pass 2 replay for remaining selectors
+     or
+  -> large/reused log: thin-index lookup and targeted range reads
   -> build, deduplicate, classify, score, and select evidence
 ```
 
-This is the default design because it supports every LogDiff signal without storing one index row for every log line.
+This design supports every LogDiff signal without making a permanent per-line index mandatory. It also avoids replaying candidates that were already discovered and expanded safely during Pass 1.
 
-#### 3.2.1 Why Logsift uses two passes
+#### 3.2.1 Why the normal strategy uses a second pass
 
-A single-pass design is attractive because it reads the log only once. It works for signals that can be decided immediately, such as a new template, an `ERROR` keyword, or a nonzero exit.
+A single-pass design is attractive because it reads the log only once. It works for signals that can be decided immediately, such as an `ERROR` keyword, an explicit exception, or a nonzero exit. A new template is not authoritative until the run-local Drain parser has been finalized and LogDiff has compared its final fingerprint with the baseline.
 
 However, some important signals are known only after the complete failed run has been summarized:
 
@@ -764,7 +782,7 @@ However, some important signals are known only after the complete failed run has
 
 To support these signals in one pass, Logsift would have to save every occurrence before it knew which ones mattered. That recreates the large sidecar we are trying to avoid.
 
-The selected trade-off is:
+For a normal one-time analysis, the selected trade-off is:
 
 ```text
 one additional sequential read
@@ -772,7 +790,7 @@ instead of
 millions of permanent occurrence records
 ```
 
-Sequential reads are predictable and can be limited by the worker scheduler. The second pass repeats deterministic preprocessing, but it keeps storage and memory bounded.
+Sequential reads are predictable and can be limited by the worker scheduler. The second pass uses the exact pinned processing configuration and a frozen read-only parser catalog. It does not learn templates again.
 
 The complexity is linear:
 
@@ -783,6 +801,8 @@ Total:  O(N)
 ```
 
 `N` is the number of bytes or events in the failed log. Two linear passes are still `O(N)`; the constant cost is approximately two sequential reads. Logsift never performs one complete scan per keyword or one complete scan per candidate.
+
+For a very large log, or when the same immutable log is expected to be analysed repeatedly, Logsift may build a temporary compressed thin index during Pass 1. That changes the later work from a complete replay to small index lookups and targeted raw-log range reads. The index is enabled only when measurement shows that its write, storage, and cleanup cost is lower than replaying the log.
 
 #### 3.2.2 Failed-run ownership and immutable storage
 
@@ -805,6 +825,18 @@ The raw log must be immutable after the terminal event. The run manifest records
 - independently readable chunk references when the log is chunked;
 - one-based physical line convention;
 - zero-based, end-exclusive byte-offset convention.
+
+Before Pass 1 starts, Logsift also writes `analysis-manifest.json`. It pins one `processing_config_version` that resolves to the exact versions of:
+
+- the Jules or Lattice adapter and source schema;
+- normalization, redaction, masking, and safe-parameter rules;
+- segmentation rules;
+- the compatible success-baseline Drain state and Drain settings;
+- the fingerprint algorithm;
+- Aho–Corasick keyword rules and bounded expression rules;
+- expansion, block, deduplication, classification, scoring, and token policies.
+
+The manifest also records the immutable raw-log object version, compatible baseline version, resource limits, and the selected occurrence-discovery strategy. Pass 1, LogDiff, replay, retries, and resumed workers must load this exact manifest. A worker that cannot load a pinned version must stop the analysis with a clear compatibility error. It must never silently use the newest deployed rules.
 
 For compressed logs, Logsift should use independently compressed chunks or seekable compression. A single large compressed stream cannot reliably provide cheap random byte-range reads. The two streaming passes can still read it sequentially, but later provenance lookups would otherwise require decompression from the beginning.
 
@@ -834,17 +866,19 @@ source adapter
   -> extract safe keyword and parameter signals
   -> mask
   -> segment
-  -> frozen Drain parser
-  -> stable fingerprint
+  -> private run-local Drain parser
+  -> stable run-local cluster ID
 ```
 
-The word `frozen` is important. A failed run may create temporary run-local parsing state, but it must never update the successful baseline model.
+Pass 1 starts from a private copy of the compatible success-baseline Drain state. This copy may create or update temporary failed-run clusters while the log is being read. The published success baseline remains immutable.
+
+Pass 1 counts by stable run-local `cluster_id`, not by an intermediate fingerprint. Drain can generalize a cluster template as it sees more matching messages, so a fingerprint calculated too early could change before the pass finishes.
 
 Safe keyword matching branches from the redacted message before masking removes useful values. The same message then continues through masking and Drain. Both branches keep the raw line and byte pointer, so their reasons can be joined later without copying the original text.
 
 For each event, Pass 1 updates:
 
-- total fingerprint count;
+- total run-local cluster count;
 - count by pipeline, branch class, stage or node, and attempt class;
 - first and last observation;
 - segment-local template sequence;
@@ -853,7 +887,7 @@ For each event, Pass 1 updates:
 - keyword-hit counts and bounded occurrence pointers;
 - source and segmentation confidence.
 
-The output is `failed-template-summary.json`. It contains summaries, not complete line text.
+The output becomes `failed-template-summary.json` after the parser is finalized and each run-local cluster has been mapped to its final fingerprint. It contains summaries, not complete line text.
 
 ##### Aho–Corasick keyword matching
 
@@ -909,6 +943,27 @@ Pass 1 keeps a bounded global tail and the final events of completed stages or n
 
 Tail candidates receive a score boost only when they also contain useful terminal, severity, state-transition, or failure information. A normal cleanup line should not outrank an earlier exception simply because it is last.
 
+##### Expand candidates that are already known
+
+Pass 1 does not need to wait for LogDiff when a candidate is already clear from a safe literal rule, explicit severity, exception structure, nonzero terminal state, or an approved tail rule.
+
+While it streams, Logsift keeps bounded ring buffers for the active Jules stage attempts and Lattice node attempts. When one of these direct candidates appears, Logsift takes the before-context from that segment's buffer and collects bounded after-context from the same segment. It stores the resulting fragment and candidate pointers under the current `analysis_id`.
+
+This is an optimization, not a separate source of truth. After LogDiff, the same occurrence may receive additional reasons such as `new_template` or `frequency_shift`. Those reasons are merged into the existing occurrence by its deterministic identity. The content is not expanded twice.
+
+##### Finalize and freeze the failed-run parser
+
+After the last event has been processed, Logsift:
+
+1. stops all updates to the run-local Drain parser;
+2. takes the final canonical template text for every run-local cluster;
+3. creates the stable fingerprint from the final template text and fingerprint version;
+4. records `run-local cluster_id -> final template -> stable fingerprint`;
+5. rewrites the accumulated cluster counts and scope statistics to their final fingerprints;
+6. stores the finalized run-local catalog as read-only failed-analysis state.
+
+Only these finalized fingerprints are sent to LogDiff. The final catalog is also the matcher used by a normal-log replay. Loading the same software version alone is not enough; replay must load this exact finalized catalog and the exact compatible baseline state recorded in the analysis manifest.
+
 #### 3.2.4 LogDiff: decide what changed
 
 LogDiff compares summaries. It does not search raw text and it does not load the complete log.
@@ -917,6 +972,7 @@ LogDiff compares summaries. It does not search raw text and it does not load the
 
 Before comparison, Logsift verifies:
 
+- the pinned `processing_config_version` and immutable raw-log object version;
 - the four-part baseline key;
 - pipeline and branch-class compatibility;
 - Jules or Lattice source type and source-schema version;
@@ -924,6 +980,7 @@ Before comparison, Logsift verifies:
 - segmentation version;
 - Drain model and configuration version;
 - fingerprint version;
+- finalized failed-run parser-catalog version;
 - safe-parameter schema version.
 
 If these versions are incompatible, Logsift stops normal LogDiff and reports why. It must not create thousands of false `new template` results caused by a processing-rule change.
@@ -1018,7 +1075,39 @@ The selector set is stored in a hash set keyed by `fingerprint + compatible scop
 
 #### 3.2.5 Pass 2: find exact occurrences
 
-Pass 2 streams the immutable failed log again and repeats the same deterministic preprocessing and frozen Drain parsing.
+Pass 2 is needed only for selectors that became known after LogDiff and were not already expanded during Pass 1. The analysis manifest selects one of two strategies before Pass 1 starts.
+
+##### Strategy A: frozen read-only replay
+
+This is the default for a normal one-time analysis. Logsift streams the immutable failed log again and loads:
+
+- the exact pinned source adapter, normalization, redaction, masking, and segmentation rules;
+- the exact compatible success-baseline Drain state used to start Pass 1;
+- the exact finalized run-local parser catalog created at the end of Pass 1;
+- deterministic similarity and tie-breaking rules.
+
+The replay matcher is read-only. It must not create a cluster, update a template, or change a fingerprint. Its job is only to map each protected event to the finalized run-local cluster and check whether its fingerprint and scope appear in the LogDiff selector hash set.
+
+At the end of replay, Logsift compares the number of matches seen for every replayed selector fingerprint and scope with the count recorded in Pass 1. A mismatch means the replay was not deterministic, the log changed, or the pinned configuration was not followed. Logsift marks the result `partial` and `needs_review`; it does not return a confidently complete evidence pack.
+
+##### Strategy B: temporary compressed thin index
+
+For a very large log or a log expected to be investigated repeatedly, Pass 1 may write a compact index entry for each parsed event. The entry contains:
+
+- run-local cluster dictionary ID;
+- segment ID and logical position;
+- one-based physical line;
+- raw chunk ID;
+- byte start and byte length;
+- safe severity, keyword, and terminal flags.
+
+The entry does not repeat template text or a full SHA-256 fingerprint. After Pass 1 freezes the parser, a small dictionary maps the run-local cluster ID to the final fingerprint. Numeric values and offsets should use a compressed binary layout, dictionary encoding, and delta encoding. This is not a JSON sidecar.
+
+LogDiff uses the dictionary to resolve selected fingerprints to run-local cluster IDs. Pass 2 then reads only the matching index entries and their neighbouring logical positions. The raw log is fetched with targeted range reads. Because the index includes `segment_id + logical_position`, Lattice expansion can recover node-local context even when its physical byte ranges are interleaved.
+
+The thin index is temporary. It is deleted after the analysis retention period unless repeated investigation has been requested. It is an optimization, not a required correctness artifact and not a permanent global log index.
+
+##### Information available for either strategy
 
 For every event, the worker already knows:
 
@@ -1031,9 +1120,9 @@ For every event, the worker already knows:
 - safe severity and parameter values;
 - protected correlation information when available.
 
-It checks the fingerprint and scope against the small selector hash set. It also joins any exact keyword or tail reason recorded during Pass 1.
+It checks the fingerprint and scope against the small selector hash set. It also joins any exact keyword, severity, terminal, or tail reason recorded during Pass 1.
 
-Logsift continues to the end of the stream. It does not stop after the first match because later occurrences may be more severe, closer to the failure, or part of a different stage or node.
+The replay strategy continues to the end of the stream. It does not stop after the first match because later occurrences may be more severe, closer to the failure, or part of a different stage or node. The index strategy retrieves every bounded or policy-selected posting for the chosen fingerprint and scope.
 
 ##### One occurrence, several reasons
 
@@ -1072,19 +1161,20 @@ The candidate pool stores references, not complete log blocks:
   "logical_position": 5,
   "byte_start": 8421,
   "byte_end": 8598,
+  "discovery_path": "pass1_inline",
   "reasons": ["new_template", "keyword:error", "severity:high"]
 }
 ```
 
 Candidate records are immutable. Additional reasons are attached through an idempotent compare-and-set merge or a new version of the grouped candidate record. A retry using the same occurrence identity updates the same logical record instead of creating a duplicate.
 
-#### 3.2.6 Per-segment ring-buffer expansion
+#### 3.2.6 Content expansion with segment-local context
 
 A ring buffer is a fixed-size circular list. When it becomes full, adding a new event replaces the oldest event. This gives Logsift a bounded memory structure for before-context.
 
 ![Logsift per-segment ring-buffer expansion](images/6_segment_ring_buffers.png)
 
-Logsift keeps one small buffer for each active logical segment:
+During Pass 1 and frozen replay, Logsift keeps one small buffer for each active logical segment:
 
 ```text
 Jules buffer key   = stage + attempt
@@ -1104,6 +1194,8 @@ When a candidate arrives, Logsift:
 5. closes the fragment at the segment boundary or configured byte and event limit.
 
 If another candidate appears before the fragment closes, Logsift extends the same fragment instead of creating an overlapping copy.
+
+When the temporary thin-index strategy is selected, the same policy is applied through index lookup rather than a complete replay. Logsift finds the candidate's `segment_id + logical_position`, selects the configured earlier and later logical positions from that segment, merges overlapping ranges, and range-reads only the required raw chunks. The resulting fragment contract is identical for both strategies.
 
 A segment buffer is removed when its stage or node attempt reaches a terminal event and no fragment is still open. If the source does not provide reliable lifecycle events, an inactivity timeout may close it with a visible low-confidence marker. Logsift must not silently evict an active Lattice buffer merely to stay under a limit; it should apply backpressure or mark the analysis partial.
 
@@ -1140,7 +1232,7 @@ The resulting Lattice fragment may therefore contain several byte ranges:
 }
 ```
 
-This is how Logsift handles interleaving without a full sidecar. Segment identity is assigned while streaming, and exact pointers are persisted only for selected fragment events.
+This is how Logsift handles interleaving. In the normal strategy, segment identity and separate node ring buffers preserve logical context while streaming. In the optional thin-index strategy, `segment_id + logical_position` retrieves the same node-local context through noncontiguous byte ranges.
 
 ##### Chunk boundaries
 
@@ -1167,12 +1259,12 @@ input chunk
 
 It is not proportional to five million lines. Limits must exist for active segments, open fragments, fragment bytes, candidate groups, and queued writes. If a limit is reached, Logsift applies backpressure or records a visible partial-evidence notice; it does not silently consume unlimited memory.
 
-#### 3.2.7 Why a full sidecar is not required
+#### 3.2.7 Why a permanent full sidecar is not required
 
-The selected design already obtains every required pointer during Pass 2:
+The normal strategy obtains every required pointer during streaming:
 
 ```text
-candidate fingerprint is known
+LogDiff selector is known
   -> current streamed event matches it
   -> current source adapter provides the segment
   -> current reader provides line and byte positions
@@ -1180,7 +1272,7 @@ candidate fingerprint is known
   -> open fragment collects later logical events
 ```
 
-The default persisted artifacts are:
+Direct keyword and terminal candidates can obtain the same pointers during Pass 1. The default persisted artifacts are:
 
 | Artifact | Size behaviour | Purpose |
 |---|---|---|
@@ -1192,21 +1284,29 @@ The default persisted artifacts are:
 | Expanded fragments | One record per bounded candidate neighbourhood | Stores selected protected content and raw references. |
 | Log blocks | One record per merged evidence story | Supplies deduplication, classification, scoring, and the LLM pack. |
 
-An optional compressed occurrence index may be added when the same failed log will be searched repeatedly. It is appropriate for interactive investigation or repeated rule experiments. It is not built for every run by default, and its benefit must be measured against storage, creation time, retention, and operational complexity.
+An optional compressed thin index may be added for a very large log or when the same failed log will be searched repeatedly. It avoids a complete replay and removes the risk of replay assigning a line differently, but it writes a compact entry for every parsed event. It is therefore not free.
+
+The decision must be benchmark-driven. Consider log size, parser cost, expected number of analyses, storage-write cost, range-read support, and retention time. The chosen strategy is written into `analysis-manifest.json` before Pass 1 so workers do not switch approaches halfway through an analysis.
+
+The index has a short retention period and remains local to one immutable failed log. It must never become a cross-tenant global index. A permanent JSON record per line remains outside the selected design.
 
 #### 3.2.8 Candidate-pool concurrency and isolation
 
 Many failed runs can be analysed at the same time. Logsift shares only immutable objects:
 
 - success baselines;
-- preprocessing and segmentation rules;
-- frozen Drain configuration;
+- versioned processing configurations;
+- preprocessing and segmentation rules resolved by those configurations;
 - fingerprint definitions;
 - compiled keyword matcher.
 
 Every analysis keeps separate mutable state:
 
 - `analysis_id`;
+- pinned analysis manifest and raw-log version;
+- private mutable run-local Drain state during Pass 1;
+- finalized read-only run-local catalog after Pass 1;
+- replay or thin-index occurrence strategy;
 - selector hash set;
 - counters;
 - per-segment ring buffers;
@@ -1230,7 +1330,7 @@ Production controls include:
 - maximum candidates per fingerprint and category;
 - expiration and cleanup after the analysis retention period.
 
-A checkpoint must contain enough state to restart without changing the result: raw-object version, pass number, completed chunk, source-adapter state, segment state, temporary failed-run Drain state, counters, and the last committed output identity. For Pass 2, Logsift either checkpoints the small ring buffers and open fragments or replays a configured overlap before the checkpoint. Output writes remain idempotent, so replaying the overlap cannot create duplicate candidates or blocks.
+A checkpoint must contain enough state to restart without changing the result: analysis-manifest version, raw-object version, pass number, completed chunk, source-adapter state, segment state, temporary failed-run Drain state, thin-index write position when enabled, counters, and the last committed output identity. For streaming replay, Logsift either checkpoints the small ring buffers and open fragments or replays a configured overlap before the checkpoint. Output writes remain idempotent, so replaying the overlap cannot create duplicate candidates or blocks.
 
 Parallelism should first be used across independent analyses. Splitting one log across many workers adds ordering and boundary complexity and can reduce performance when storage bandwidth is already saturated.
 
@@ -1373,60 +1473,48 @@ Code knowledge is not required for broad classification. A log can usually be cl
 
 Scoring answers: “Which blocks are most useful for explaining this failure?” It does not replace classification confidence or operational priority, and it does not answer: “How many tokens does each block receive?” Token selection is a later step.
 
-Versioned classification rules may add a bounded score boost or require a block to be included. For example, a `P0` security block is required evidence even when it is not close to the terminal line. The score record must name the rule; priority must not silently become an unexplained score.
+The first scoring version deliberately uses only three factors. A ten-factor formula can look accurate before the team has enough confirmed failures to justify its weights.
 
 Every factor is normalized to a value from `0` to `1`:
 
-| Factor | Meaning | Default weight |
-|---|---|---:|
-| `N` novelty | How different the template or sequence is from the baseline | 0.18 |
-| `S` severity | Strength of error, exception, exit, or failure state | 0.18 |
-| `F` frequency shift | Size and reliability of the count change | 0.12 |
-| `P` proximity | Closeness to the failed terminal transition | 0.10 |
-| `G` scope relevance | Relationship to the failed stage or node | 0.10 |
-| `T` structure | Presence of a stack trace, assertion, or clear transition | 0.08 |
-| `C` correlation | Link to the failing request, process, container, or dependency | 0.08 |
-| `V` parameter shift | Strength of a safe value-distribution change | 0.06 |
-| `Q` source confidence | Confidence in source detection and segmentation | 0.05 |
-| `E` evidence quality | Completeness and provenance quality | 0.05 |
+| Factor | Meaning | Starting calculation | Weight |
+|---|---|---|---:|
+| `N` novelty | How different the block's template or transition is from the compatible baseline | `1.0` for a new fingerprint; lower documented values for a changed sequence, scope, frequency, or safe parameter; `0` for known normal behaviour | 0.40 |
+| `S` severity | Strength of an explicit exception, assertion, error, nonzero exit, or failed terminal state | Versioned severity mapping; for example fatal `1.0`, error/assertion `0.8`, warning `0.4`, informational `0.1` | 0.35 |
+| `P` failure proximity | How close the block is to the failed transition inside the same stage or node | `max(0, 1 - logical_distance / configured_window)` | 0.25 |
 
-The positive weights add to `1.00`.
-
-Penalties are also between `0` and `1`:
-
-- `R` repetition penalty with default weight `0.10`;
-- `D` duplicate penalty with default weight `0.10`.
-
-The starting formula is:
+The provisional first-version formula is:
 
 ```text
-base score = 100 × clamp(0, 1,
-  0.18N + 0.18S + 0.12F + 0.10P + 0.10G
-  + 0.08T + 0.08C + 0.06V + 0.05Q + 0.05E
-  - 0.10R - 0.10D)
+base score = 100 × clamp(0, 1, 0.40N + 0.35S + 0.25P)
 ```
 
-`clamp(0,1,x)` keeps the result between zero and one. Versioned rules may add a bounded boost, penalty, or required-inclusion decision. The final score remains between 0 and 100.
+`logical_distance` counts events inside the same Jules stage attempt or Lattice node attempt. Proximity is useful supporting information, but it is not proof of causality.
+
+Logsift should still record frequency shift, scope relevance, stack structure, correlation, parameter shift, source confidence, evidence quality, repetition, and duplicate information. These signals remain visible in the block and can guide required-inclusion and diversity rules, but they do not receive score weights until evaluation on confirmed failures shows that they improve ranking.
+
+For the first version, deterministic rules may require a block, such as approved `P0` security evidence or the final nonzero exit. They should not add unexplained numeric boosts. A later scoring-policy version may add factors or bounded adjustments only after each signal has a documented `0` to `1` calculation and measured benefit.
 
 ##### Small scoring example
 
-| Block | Classification and confidence | Priority | Main signals | Base result | Rule adjustment | Final evidence score |
-|---|---|---|---|---:|---:|---:|
-| API timeout and assertion | `test.assertion`, 0.96 | `P1` | New, severe, correlated, near failure, parameter shift | 91 | +4 confirmed timeout rule | 95 |
-| Terminal exit code 1 | `pipeline.nonzero_exit`, 0.99 | `P2` | Severe and near failure, but mainly a consequence | 67 | +3 required terminal evidence | 70 |
-| Repeated cache warning | `infrastructure.warning`, 0.82 | `P3` | Frequent but normal in baseline and unrelated to failed scope | 24 | -5 unrelated-scope rule | 19 |
+| Block | Classification and confidence | Priority | `N` | `S` | `P` | Evidence score |
+|---|---|---|---:|---:|---:|---:|
+| API timeout and assertion | `test.assertion`, 0.96 | `P1` | 1.0 | 0.9 | 0.9 | 94 |
+| Terminal exit code 1 | `pipeline.nonzero_exit`, 0.99 | `P2` | 0.6 | 0.8 | 1.0 | 77 |
+| Repeated cache warning | `infrastructure.warning`, 0.82 | `P3` | 0.0 | 0.4 | 0.2 | 19 |
 
-The most frequent message is not automatically the best evidence. Frequency is only one factor, and repetition can reduce value.
+The most frequent message is not automatically the best evidence. Frequency remains a LogDiff signal and selection constraint, while repeated copies are handled by deduplication and diversity rules rather than receiving an untested numeric weight.
 
 ##### Transparent score records
 
 Every scored block stores:
 
 - its classification category, confidence, operational priority, classifier version, and priority-policy version as separate fields;
-- each normalized factor;
+- the three scored factors and their exact calculations;
+- additional unscored signals retained for evaluation;
 - baseline and failed counts or parameter shares;
 - weights and policy version;
-- boosts, penalties, and required rules;
+- required-inclusion or exclusion rules;
 - final score;
 - a short plain-language explanation.
 
@@ -1550,9 +1638,11 @@ Pass 1 streams the log and produces:
 1 nonzero terminal exit
 ```
 
-The compatible baseline normally contains two `fp-api-error` occurrences in Test. LogDiff creates selectors for the frequency shift, assertion failure, and terminal exit.
+Keyword, severity, and terminal rules expand their bounded candidates while Pass 1 is already reading the log. After the last line, Logsift freezes the run-local Drain parser, maps every run-local cluster ID to its final fingerprint, and then runs LogDiff.
 
-Pass 2 streams the same raw log again. It does not hold five million lines. When it reaches line 1,842,991:
+The compatible baseline normally contains two `fp-api-error` occurrences in Test. LogDiff creates selectors for the frequency shift and any other changes that were not already sufficient direct candidates.
+
+For a normal one-time analysis, frozen read-only Pass 2 streams the same raw log again. It does not hold five million lines. When it reaches line 1,842,991:
 
 ```text
 fingerprint + scope matches a selector
@@ -1565,9 +1655,11 @@ fingerprint + scope matches a selector
 
 A repeated error at line 1,842,994 extends the open fragment. Later, deduplication records two occurrences instead of copying the same story twice.
 
+If measurement selected the temporary thin-index strategy, Pass 1 wrote compact cluster, segment, logical-position, line, chunk, and byte references. LogDiff resolves `fp-api-error` to its run-local cluster dictionary ID, and Logsift range-reads only the matching and neighbouring regions instead of replaying five million lines.
+
 For Lattice, the same process uses the matching node-attempt buffer. Physically interleaved output from other nodes is ignored, while the resulting fragment retains every noncontiguous raw byte range.
 
-At no point are five million log lines loaded into application memory or written as five million JSON index records.
+At no point are five million log lines loaded into application memory or written as five million JSON index records. A temporary binary entry per parsed event exists only when the measured thin-index strategy is enabled.
 
 #### 3.2.15 End-to-end example using the final design
 
@@ -1578,12 +1670,13 @@ The Jules example moves through the complete flow:
 | Step | Input | Output | What changed |
 |---|---|---|---|
 | Offline learning | [Trusted success log](examples/final-design/jules/success.log) | [Success baseline](examples/final-design/jules/success-baseline.json) | Dynamic values became templates; counts, safe values, and stage-local order became the normal baseline. |
-| Failed Pass 1 | [Failed log](examples/final-design/jules/failed.log) | [Failed summary](examples/final-design/jules/failed-template-summary.json) | Eleven physical lines became bounded fingerprint counts, safe parameters, a Test-stage sequence, multiline relationships, and terminal state. |
+| Analysis start | Terminal event and immutable failed log | [Analysis manifest](examples/final-design/jules/analysis-manifest.json) | One processing configuration, raw-log version, baseline, replay strategy, and limits were pinned before Pass 1. |
+| Failed Pass 1 | [Failed log](examples/final-design/jules/failed.log) | [Failed summary](examples/final-design/jules/failed-template-summary.json) | Eleven physical lines became run-local cluster counts; the parser was then frozen and the final clusters were mapped to fingerprints. Direct keyword, severity, and terminal candidates were expanded inline. |
 | LogDiff | Success baseline plus failed summary | [LogDiff result](examples/final-design/jules/logdiff-result.json) | Logsift found a new retry path, a status and duration shift, an assertion, a nonzero test count, a nonzero exit, and missing package output. |
-| Failed Pass 2 | Failed log plus LogDiff selectors | [Candidate occurrences](examples/final-design/jules/candidate-occurrences.jsonl) | Five selected events received exact line, logical-position, byte, segment, fingerprint, and reason pointers. |
+| Failed occurrence lookup | Failed log plus LogDiff selectors | [Candidate occurrences](examples/final-design/jules/candidate-occurrences.jsonl) | Direct Pass 1 candidates and frozen-replay matches became five selected events with exact line, logical-position, byte, segment, fingerprint, reason, and discovery-path pointers. |
 | Expansion | Candidate occurrences plus Test-stage ring buffer | [Expanded fragment](examples/final-design/jules/expanded-fragments.jsonl) | Overlapping before-and-after windows and the complete stack trace became one protected Test-stage fragment. |
 | Block construction, deduplication, and classification | Expanded fragment | [Log blocks](examples/final-design/jules/log-blocks.jsonl) | The likely assertion cause and terminal exit became separate blocks. Each block received an error category, confidence score, priority, reasons, and exact provenance. |
-| Scoring and token selection | Classified log blocks plus policy | [Evidence pack](examples/final-design/jules/evidence-pack.json) | The assertion block received `P1` and evidence score 95. The terminal consequence received `P2` and score 70. Both fit without unsafe trimming. |
+| Scoring and token selection | Classified log blocks plus policy | [Evidence pack](examples/final-design/jules/evidence-pack.json) | The provisional three-factor policy gave the assertion block score 94 and the terminal consequence score 77. Both fit without unsafe trimming. |
 | Model assembly | Evidence pack | [Final model input](examples/final-design/jules/llm-input.md) | The model receives classifications, priorities, scores, measurable differences, selected evidence, and exact references instead of the complete log. |
 
 The same folder contains a [physically interleaved Lattice log](examples/final-design/lattice/failed.log). Its [candidate occurrences](examples/final-design/lattice/candidate-occurrences.jsonl) point to physical lines 6, 8, and 10. The [expanded Lattice fragment](examples/final-design/lattice/expanded-fragments.jsonl) correctly includes node-local lines 2, 4, 6, 8, and 10 while excluding physical lines owned by other DAG nodes.
@@ -1595,7 +1688,11 @@ This example set should be updated whenever a contract in this document changes.
 Before implementation is considered complete, verify:
 
 - the raw log becomes immutable before analysis;
-- both passes use identical versioned processing;
+- `analysis-manifest.json` pins one complete processing configuration, raw-log object version, baseline version, limits, and occurrence strategy before Pass 1;
+- Pass 1 uses a private run-local Drain copy and never changes the published success baseline;
+- run-local templates and fingerprints are finalized only after Pass 1 ends;
+- Pass 2 loads the exact finalized catalog in read-only mode and cannot create or update templates;
+- deterministic replay produces the expected fingerprint, segment, logical-position, and occurrence counts, or the analysis is marked `partial` and `needs_review`;
 - failed parsing never updates the successful Drain baseline;
 - selectors use stable fingerprints and compatible scope, never local template IDs;
 - Aho–Corasick rules are versioned and literal-only;
@@ -1605,16 +1702,18 @@ Before implementation is considered complete, verify:
 - chunk boundaries preserve lines, segments, buffers, and open fragments;
 - candidate records carry `analysis_id` and exact provenance;
 - repeated selection reasons merge into one occurrence;
+- direct Pass 1 candidates are not expanded again during Pass 2;
+- the optional thin index uses a compressed binary dictionary, includes segment and logical position for Lattice, and has a short retention period;
 - worker pools, queues, candidate groups, fragments, and memory are bounded;
 - cancellation, retry, leases, and cleanup are implemented;
 - deduplication retains counts and locations;
 - every log block has a versioned error category, confidence score, priority, priority reasons, and review flag;
 - classification confidence, operational priority, and evidence-ranking score remain separate fields;
-- score records expose all factors and measured differences;
+- the initial score uses only documented novelty, severity, and proximity calculations; additional factors require evaluation and a new policy version;
 - token selection uses the target tokenizer;
 - every final claim cites evidence;
 - incompatible or partial evidence is reported clearly;
-- a full sidecar, memory mapping, SIMD filtering, and compressed postings remain optional benchmark-driven optimizations.
+- a permanent full sidecar is not created; a temporary thin index, memory mapping, SIMD filtering, and other low-level optimizations remain benchmark-driven choices.
 
 ### 3.3 Phase 3 — Solution finding
 
@@ -1684,13 +1783,14 @@ A trade-off means that a design choice gives Logsift one benefit but also adds a
 | Design choice | What it gives us | Cost or risk | How Logsift limits the risk |
 |---|---|---|---|
 | Repository-level template catalog | Templates can be reused across pipelines in the same repository without creating many separate catalogs. | A template that is normal in one pipeline could hide a problem in another. | Keep pipeline, branch class, stage or node, attempt, and environment statistics separate inside the baseline. LogDiff uses only compatible statistics. |
-| Two failed-log streaming passes | Supports frequency, missing, scope, sequence, and parameter changes without storing every occurrence. | Reads and preprocesses the failed log twice. | Use sequential chunked reads, frozen reusable configuration, bounded workers, and local or independently compressed immutable chunks. Measure whether a future optional index is justified. |
+| Adaptive failed-log occurrence lookup | Normal logs use one summary pass plus frozen read-only replay; large or repeatedly analysed logs may use a temporary thin index and targeted reads. | Replay adds CPU and read cost; the index adds write, storage, and cleanup cost. | Pin the choice before Pass 1, measure both paths, expand direct candidates in Pass 1, and use the index only past a measured break-even point. |
+| Mutable Pass 1 and frozen Pass 2 | Pass 1 can discover failed-run templates, while Pass 2 can find their exact occurrences without changing them. | Drain templates evolve during Pass 1, so intermediate fingerprints or an independently rebuilt parser can disagree. | Count by run-local cluster ID, fingerprint only final templates, persist the final catalog, make replay read-only, and validate occurrence counts. |
 | Three candidate routes | LogDiff finds changed behaviour, keywords keep obvious failures, and the log tail keeps useful terminal output. This improves recall. | More routes can produce more noise and duplicate candidates. | Merge by `occurrence_id`, keep all reasons, use bounded per-route sampling, and let later scoring reject unrelated evidence. |
 | Aho–Corasick literal matching | Checks all configured literal failure words during one message scan. | It does not express every complex pattern and a broad keyword can still create noise. | Keep literals in the shared matcher, use only bounded tested expressions for complex cases, group repeated hits, and version the rules. |
 | Four lines before and six after | Provides a simple and repeatable starting window that works for many errors. | A fixed window may be too small for a long stack trace or too large for a short message. | Extend to complete known structures, stop at safe boundaries, enforce size limits, and keep the window configurable. |
 | Segment-aware expansion | Jules context stays in its stage attempt, while Lattice context stays in its node attempt even when physical lines are interleaved. | Source adapters and segmentation rules become more complex. Incorrect segmentation can select the wrong context. | Store segmentation confidence, validate source metadata, and use a marked lower-confidence physical fallback instead of guessing. |
 | Per-segment ring buffers | Expand Jules and interleaved Lattice context with memory independent of total log size. | Memory grows with active segments and open fragments, not just window size. | Bound active segments, window size, fragment size, open fragments, and queued writes; apply backpressure when limits are reached. |
-| No full line-level sidecar by default | Avoids millions of index records and their creation, retention, and cleanup cost. | Repeated analysis must stream the log again. | Persist candidate-only pointers. Add a compressed occurrence index only for logs whose repeated-query benefit is measured and clear. |
+| No permanent full line-level sidecar | Avoids millions of durable JSON records and long-term cleanup cost. | Replay may be expensive for very large or repeatedly inspected logs. | Persist candidate-only pointers by default. When measured benefit is clear, use a short-lived compressed binary thin index with dictionary IDs, segment/logical positions, and delta-encoded offsets. |
 | Pointer-only candidate pool | Keeps memory and storage small and isolates concurrent analyses with `analysis_id`. | Expansion depends on the referenced raw log still being available and unchanged. | Use immutable log object IDs, keep raw-log retention longer than analysis retention, validate the object version, and fail clearly when content is unavailable. |
 | Stable template fingerprints | Workers can compare templates without trusting parser-local numeric IDs. | A change to normalization, masking, Drain settings, or fingerprint rules can change many fingerprints. | Version every processing step and refuse normal comparison when versions are incompatible. |
 | Rich LogDiff checks | Frequency, scope, order, severity, and safe parameter changes can find failures that simple template membership misses. | More checks add tuning work and may create false positives. | Start with conservative thresholds, store the reason for every result, and validate rules with real successful and failed runs. |
@@ -1698,7 +1798,7 @@ A trade-off means that a design choice gives Logsift one benefit but also adds a
 | Recent-template cache | Can reduce repeated Drain routing for locally repeated templates. | Cache state adds memory and could create inconsistent parsing if implemented incorrectly. | Treat it as optional, bound it per compatible scope, require identical output with cache disabled, and enable it only after measurement. |
 | Deduplication | Removes repeated evidence and saves model tokens. | Similar-looking events from different attempts or nodes may have different meaning. | Deduplicate only with compatible scope rules and retain counts, every affected scope, first and last occurrence, examples, and all raw locations. |
 | Error classification and priority | Gives engineers and the model a consistent category, confidence, and handling priority for each block. | A wrong but confident label or inflated priority can bias ranking and diagnosis. | Keep reasons and versions, calibrate confidence, require deterministic rules for `P0`, preserve `unknown`, and keep classification separate from evidence scoring. |
-| Diagnostic density and evidence score | Density prefers focused blocks, while the final score considers severity, novelty, correlation, scope, and repetition. | Scores can look precise even when their weights are only starting recommendations. A dense block can still be irrelevant. | Keep density secondary, store every factor and rule adjustment, show a score explanation, and tune the policy using labelled failures. |
+| Simple first scoring policy | Novelty, explicit severity, and failure proximity are understandable and available before richer calibration exists. | It may miss useful correlation, scope, parameter, or structure signals. | Keep those signals as unscored metadata, use required/diversity rules where necessary, and add a factor only after its calculation and measured ranking benefit are documented in a new policy version. |
 | Token optimization | Keeps model requests within a predictable cost and context limit. | Compacting, summarizing, or omitting evidence can remove useful detail. | Keep required structures intact, shorten only derived evidence at safe boundaries, record every omission, and retain pointers to the full raw evidence. |
 | Evidence-to-claim mapping | Makes every important diagnosis and remediation statement auditable. | The response contract is stricter and can expose missing evidence instead of producing a confident answer. | Require evidence IDs, source IDs, confidence, and uncertainties; treat inability to support a claim as a correct limitation. |
 | Redaction and masking | Protects secrets and reduces dynamic noise before templates or derived evidence are stored. | An overly broad rule can remove useful diagnostic values or merge different messages. | Test and version the rules, use typed placeholders, allow safe exceptions, record rule matches without secret values, and stop processing when redaction cannot be trusted. |
@@ -1738,11 +1838,12 @@ Training or tuning examples must not also be used as the final test set. Hold ou
 | Redaction | Every configured secret type, multiline secrets, and adversarial formatting | A secret reaches a template, block, metric label, or model input |
 | Masking | Dynamic values, allow-list exceptions, and safe parameter extraction | Different messages merge or an important diagnostic value disappears |
 | Segmentation | Stage/node ownership, attempts, lifecycle events, and Lattice interleaving | Context from another stage or node enters the block |
-| Drain and fingerprinting | Split/merge quality, deterministic replay, version changes, and text verification | Different workers assign incompatible meaning to local IDs |
+| Drain and fingerprinting | Split/merge quality, run-local cluster stability, final fingerprinting, frozen read-only replay, deterministic tie-breaking, version changes, and text verification | Intermediate or replayed templates receive different fingerprints or occurrence counts |
 | LogDiff | New, missing, frequency, parameter, scope, severity, and sequence changes | Important differences are missed or incompatible baselines are compared |
 | Aho–Corasick rules | Case policy, word boundaries, overlapping terms, Unicode, and hit limits | One broad word floods the candidate pool or a critical literal is missed |
 | Candidate pool | Idempotency, compare-and-set merging, leases, expiry, and partition keys | Two concurrent analyses mix state or retries duplicate candidates |
 | Ring-buffer expansion | Chunk boundaries, before/after windows, stack extension, segment closure, and overlap merging | Before-context is lost or Lattice output is mixed physically |
+| Optional thin index | Dictionary mapping, delta decoding, segment/logical lookup, noncontiguous Lattice ranges, expiry, and comparison with replay output | The index returns the wrong event, silently loses context, or remains stored longer than policy allows |
 | Blocks and deduplication | Exact, canonical, retry-loop, and near-duplicate cases | Deduplication removes different causes or loses occurrence history |
 | Classification and scoring | Category accuracy, confidence calibration, priority rules, factor values, explanations, and deterministic ties | An uncertain category becomes `P0`, or a repeated warning outranks the first causal error without explanation |
 | Token selection | Exact tokenizer, quotas, safe boundaries, summaries, and final recount | A stack trace is cut incorrectly or the request exceeds the model limit |
@@ -1789,6 +1890,8 @@ The following are release gates, not averages:
 - every seeded secret in the security test corpus is redacted before derived storage or model input;
 - every selected block resolves to the expected immutable log object, version, line, byte range, and segment;
 - incompatible processing versions are rejected;
+- a worker cannot replace a pinned processing version with the newest deployed version;
+- replay occurrence counts match Pass 1 for selected fingerprint scopes, or the result is marked `partial` and `needs_review`;
 - wrong-tenant, wrong-repository, unauthorized, and wrong-commit retrieval results are blocked;
 - concurrent `analysis_id` tests show no cross-request candidates, buffers, fragments, or blocks;
 - retry and checkpoint tests produce the same logical result as an uninterrupted run;
@@ -1802,7 +1905,9 @@ As a provisional product-quality target, the team can begin with at least 95% re
 
 Run load tests with realistic log-size and concurrency distributions, not only one five-million-line file on an idle machine. Measure:
 
-- bytes processed per second for both passes;
+- bytes processed per second for Pass 1, frozen replay, and targeted thin-index reads;
+- direct-candidate percentage expanded during Pass 1;
+- replay versus thin-index latency, CPU, bytes read, bytes written, and storage break-even;
 - p50, p95, and p99 time from terminal event to evidence pack;
 - peak memory per worker and per active analysis;
 - active Lattice segment count and ring-buffer memory;
@@ -1830,7 +1935,7 @@ Cost analysis answers two questions: how much Logsift costs to operate, and whet
 | Area | What creates cost | Important control |
 |---|---|---|
 | Successful learning | One sequential preprocessing and Drain pass over eligible successful logs | Learn only from trusted runs and publish compact summaries |
-| Failed analysis | Two sequential reads, parsing, LogDiff, expansion, blocks, and scoring | Bounded workers, candidate limits, and no per-line persisted index |
+| Failed analysis | One required summary pass, direct expansion, LogDiff, and either frozen replay or temporary thin-index lookup | Bounded workers, candidate limits, pinned strategy, short index retention, and measured break-even rules |
 | Raw-log storage | Log size, compression, replicas, and retention time | Independent compression, lifecycle deletion, and policy-based retention |
 | Derived storage | Baselines, summaries, candidates, fragments, blocks, and evidence packs | Immutable compact artifacts, expiry, and deduplication |
 | Model use | Input evidence, retrieved context, and output tokens | Token reservations, deduplication, compact forms, and request limits |
@@ -1844,6 +1949,9 @@ Use these measured quantities:
 
 - `S` = bytes from eligible successful logs processed during the month;
 - `F` = bytes from failed logs analysed during the month;
+- `F_replay` = failed-log bytes read again by the frozen replay strategy;
+- `R_targeted` = raw-log bytes fetched by thin-index range reads;
+- `I_written` = compressed thin-index bytes written;
 - `W` = total worker seconds consumed by preprocessing, parsing, LogDiff, and expansion;
 - `G_raw` = average raw-log gigabytes retained during the month;
 - `G_derived` = average baseline, candidate, block, and evidence gigabytes retained;
@@ -1852,13 +1960,13 @@ Use these measured quantities:
 - `T_embed` = tokens embedded for changed knowledge and code;
 - `Q_store` and `Q_retrieval` = storage and retrieval request counts.
 
-The expected internal streaming volume for the default flow is approximately:
+The expected internal raw-log read volume for the adaptive flow is approximately:
 
 ```text
-streamed bytes = S + 2F
+raw-log bytes read = S + F + F_replay + R_targeted
 ```
 
-The successful flow reads eligible logs once. The failed flow reads each failed log twice. Upload traffic and optional replay are counted separately so they do not disappear inside this estimate.
+The successful flow reads eligible logs once. Every failed log contributes its Pass 1 bytes to `F`. Only replayed logs contribute to `F_replay`; thin-index analyses contribute targeted raw reads instead. `I_written` is counted as derived-storage write volume. Upload traffic and checkpoint replay are counted separately so they do not disappear inside this estimate.
 
 The total monthly operating cost is:
 
@@ -1891,6 +1999,7 @@ Use the price unit required by the provider, such as price per million tokens, r
 Each `analysis_id` should emit a cost-usage record containing:
 
 - raw bytes, compressed bytes, and bytes read in each pass;
+- chosen occurrence strategy, direct candidates expanded during Pass 1, thin-index bytes written, targeted range-read bytes, and index retention time;
 - worker seconds and peak memory;
 - segment, template, keyword-hit, selector, and candidate counts;
 - fragment bytes before and after overlap merging;
@@ -1904,9 +2013,9 @@ These records allow cost to be grouped by tenant, repository, source type, pipel
 
 ### 6.4 Compare design choices with measured break-even points
 
-The full-line index decision is a good example. Let:
+The temporary thin-index decision is a good example. Let:
 
-- `C_index` be the cost to build, store, and later delete an occurrence index;
+- `C_index` be the cost to build, store, query, and later delete the compressed thin index;
 - `C_rescan` be the cost of one additional sequential Pass 2;
 - `Q` be the number of analyses or interactive searches expected for the same immutable failed log.
 
@@ -1962,13 +2071,15 @@ The important boundaries are explicit:
 
 - only eligible successful runs can update the baseline;
 - Jules stages and Lattice nodes keep their own scope and order;
-- failed runs use compatible frozen processing but never teach the baseline;
+- failed analyses pin one complete processing configuration and never teach the successful baseline;
 - candidate discovery combines LogDiff, configured failure keywords, and the source-aware log tail;
-- Pass 1 creates a compact failed-run summary and Pass 2 finds exact occurrences;
+- Pass 1 uses a private run-local Drain copy, then freezes it and fingerprints only its final templates;
+- obvious candidates expand during Pass 1; remaining LogDiff selectors use frozen read-only replay or a measured temporary thin index;
 - Aho–Corasick checks all literal failure keywords during one message scan;
 - large logs are streamed in bounded chunks instead of being loaded completely into memory;
 - per-stage and per-node ring buffers expand context correctly, including interleaved Lattice output;
-- only candidate and fragment pointers are persisted by default; a full sidecar is not required;
+- only candidate and fragment pointers are persisted by default; a permanent full sidecar is not required;
+- an optional thin index uses compressed dictionary IDs and segment-aware pointers, has short retention, and is enabled only when it beats replay;
 - deduplication reduces repeated evidence without losing its history;
 - safe parameter distributions preserve diagnostic changes that masking removes from template text;
 - error classification, confidence, operational priority, evidence scoring, and token selection are separate decisions with stored explanations;
@@ -1989,13 +2100,13 @@ The following work is intentionally left open:
 - [ ] Confirm the real Jules and Lattice source markers, event fields, stage or node boundaries, attempts, terminal states, and ordering guarantees.
 - [ ] Finalize the canonical event, rule-file, segment manifest, raw-log manifest, candidate-pool, evidence-block, and storage contracts.
 - [ ] Select the persistent stores for baselines, candidate state, evidence blocks, analysis manifests, and restricted raw logs.
-- [ ] Implement and test both streaming passes, compressed-log handling, chunk restart, cancellation, retries, leases, cleanup, and concurrent `analysis_id` isolation.
+- [ ] Implement the pinned analysis manifest, private Pass 1 parser, final cluster-to-fingerprint mapping, frozen replay matcher, occurrence-count validation, compressed-log handling, restart, cancellation, retries, leases, cleanup, and concurrent `analysis_id` isolation.
 - [ ] Implement the versioned Aho–Corasick literal matcher and safety rules for bounded complex patterns.
 - [ ] Implement per-stage and per-node ring buffers with hard memory, candidate, fragment, and output-queue limits.
 - [ ] Build a representative evaluation set containing successful and failed Jules and Lattice runs.
 - [ ] Review the provisional accuracy targets and approve release gates for evidence recall, precision, expansion coverage, contamination, provenance, redaction, and isolation.
 - [ ] Measure candidate recall, evidence precision, expansion accuracy, parser quality, memory use, processing time, storage cost, compression ratio, and model-token cost at p50, p95, and p99.
-- [ ] Tune failure keywords, log-tail size, adaptive candidate limits, the four-before/six-after window, block-size limits, density use, scoring weights, and token reservations using the evaluation set.
+- [ ] Tune failure keywords, log-tail size, adaptive candidate limits, the four-before/six-after window, block-size limits, provisional novelty/severity/proximity scoring, and token reservations using the evaluation set.
 - [ ] Test missing segments, low-confidence segmentation, truncated logs, unavailable raw-log objects, incompatible baselines, multiline errors, and heavily interleaved Lattice output.
 - [ ] Test safe parameter types and thresholds so status, exit, duration, memory, and count changes are useful without exposing restricted values.
 - [ ] Finalize the error-category taxonomy, confidence calibration method, `P0` to `P4` priority rules, classifier versioning, and human-review thresholds.
@@ -2004,6 +2115,6 @@ The following work is intentionally left open:
 - [ ] Emit per-analysis cost-usage records and build cost dashboards for compute, storage, model tokens, indexing, retrieval, retries, and retention.
 - [ ] Set tenant and repository cost budgets, alert thresholds, and visible partial-result behaviour before production rollout.
 - [ ] Add an evidence-to-claim validator for final RCA and remediation output.
-- [ ] Decide whether frequently re-analysed logs justify an optional compressed occurrence index. Do not make it a default requirement without measurement.
+- [ ] Benchmark frozen replay against the optional compressed thin index by log size, parser cost, expected query count, storage duration, Jules/Lattice interleaving, and cold-cache behaviour. Approve a threshold only after measurement.
 - [ ] Define retention, deletion, encryption, access-control, and audit requirements for raw logs and derived artifacts.
 - [ ] Review every recommended structure with the implementation owners and replace recommendation labels only when the contract is approved.

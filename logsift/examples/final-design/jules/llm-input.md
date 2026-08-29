@@ -23,7 +23,7 @@ Explain the most likely cause of this failed run. Use only the supplied evidence
 
 ## Evidence blocks
 
-### `block-test-cause` — priority P1 — evidence score 95 — lines 3 to 10
+### `block-test-cause` — priority P1 — evidence score 94 — lines 3 to 10
 
 - Error classification: `test.assertion`
 - Secondary label: `dependency.http_5xx`
@@ -31,7 +31,8 @@ Explain the most likely cause of this failed run. Use only the supplied evidence
 - Priority reasons: primary failed Test-stage block, nonzero test count, complete assertion stack
 - Classifier version: `error-classifier/v1`
 - Priority policy: `error-priority/v1`
-- Scoring policy: `evidence-score/v1`
+- Scoring policy: `evidence-score/v2-provisional`
+- Scored factors: novelty `1.0`, severity `0.9`, failure proximity `0.9`
 
 ```text
 PaymentServiceTest started
@@ -47,7 +48,7 @@ Why selected: new assertion template, safe status and duration shift, complete s
 
 Provenance: failed log object `failed.log` version `v1`, bytes 103 to 783.
 
-### `block-terminal-exit` — priority P2 — evidence score 70 — line 11
+### `block-terminal-exit` — priority P2 — evidence score 77 — line 11
 
 - Error classification: `pipeline.nonzero_exit`
 - Secondary label: `terminal.consequence`
@@ -55,7 +56,8 @@ Provenance: failed log object `failed.log` version `v1`, bytes 103 to 783.
 - Priority reasons: required terminal evidence, likely consequence rather than first cause
 - Classifier version: `error-classifier/v1`
 - Priority policy: `error-priority/v1`
-- Scoring policy: `evidence-score/v1`
+- Scoring policy: `evidence-score/v2-provisional`
+- Scored factors: novelty `0.6`, severity `0.8`, failure proximity `1.0`
 
 ```text
 Pipeline completed exit_code=1

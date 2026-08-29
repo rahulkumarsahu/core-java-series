@@ -27,8 +27,8 @@
         "priority_policy_version": "error-priority/v1"
       },
       "representation": "full",
-      "evidence_score": 95,
-      "scoring_policy_version": "evidence-score/v1",
+      "evidence_score": 94,
+      "scoring_policy_version": "evidence-score/v2-provisional",
       "tokens": 176
     },
     {
@@ -43,8 +43,8 @@
         "priority_policy_version": "error-priority/v1"
       },
       "representation": "full",
-      "evidence_score": 70,
-      "scoring_policy_version": "evidence-score/v1",
+      "evidence_score": 77,
+      "scoring_policy_version": "evidence-score/v2-provisional",
       "tokens": 18
     }
   ],
